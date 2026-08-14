@@ -722,7 +722,13 @@ public sealed class FarmSession
             // Stop a little inside reach so arriving is unambiguous rather than
             // a question of rounding.
             var closeTo = EngageRange * 0.8f;
-            if (distance > config.MountDistance)
+
+            // What is worth mounting for is the ground still to cover, which is
+            // the distance less the reach, not the distance itself. Measured the
+            // other way, a ranged job that had just dismounted at the edge of
+            // its reach would mount again the moment its target shuffled a yalm
+            // further off, and spend the fight climbing on and off.
+            if (distance - EngageRange > config.MountDistance)
                 Approach(player, quarry.Position, closeTo);
             else
                 Steer(quarry.Position, closeTo);
