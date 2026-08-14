@@ -61,9 +61,9 @@ public sealed record MobEntry(
 /// community-collected CSVs and are joined here on BNpcName.
 ///
 /// Spawn positions arrive map projected, so X and Y are converted to world
-/// coordinates. The third component is kept only as a hint: elevation in this
-/// data is not reliable enough to path to, so the caller snaps to the navmesh
-/// floor before moving.
+/// coordinates. There is no height in them: what looks like a third dimension
+/// is the second one already converted. Callers drop the point onto the navmesh
+/// to find the ground.
 /// </remarks>
 public sealed class MobIndex
 {
@@ -111,21 +111,14 @@ public sealed class MobIndex
         // Spawn points only mean anything within one territory's projection, and
         // two territories can share coordinate values entirely.
         var grouped = new Dictionary<(uint NameId, uint Territory), List<Vector3>>();
-        var elevations = new Dictionary<(uint NameId, uint Territory), List<float>>();
         var baseIds = new Dictionary<uint, HashSet<uint>>();
 
-        void Record(uint nameId, uint territoryId, Vector3 world, float? elevation)
+        void Record(uint nameId, uint territoryId, Vector3 world)
         {
             var key = (nameId, territoryId);
             if (!grouped.TryGetValue(key, out var points))
                 grouped[key] = points = [];
             points.Add(world);
-
-            if (elevation is not { } value)
-                return;
-            if (!elevations.TryGetValue(key, out var known))
-                elevations[key] = known = [];
-            known.Add(value);
         }
 
         foreach (var spawn in spawns)
@@ -141,6 +134,9 @@ public sealed class MobIndex
             if (!territory.Map.ValueNullable.HasValue)
                 continue;
 
+            // Only X and Y carry anything. The third component is the same as
+              // the second, already converted to world coordinates, so there is
+              // no height in this data at all and none should be invented.
             var map = territory.Map.Value;
             Record(
                 spawn.BNpcNameId,
@@ -148,8 +144,7 @@ public sealed class MobIndex
                 new Vector3(
                     (float)MapCoordinates.ToWorld(spawn.Position.X, map.SizeFactor, map.OffsetX),
                     0f,
-                    (float)MapCoordinates.ToWorld(spawn.Position.Y, map.SizeFactor, map.OffsetY)),
-                spawn.Position.Z);
+                    (float)MapCoordinates.ToWorld(spawn.Position.Y, map.SizeFactor, map.OffsetY)));
 
             if (spawn.BNpcBaseId != 0)
             {
@@ -182,8 +177,7 @@ public sealed class MobIndex
                     new Vector3(
                         (float)MapCoordinates.ToWorld(point[1], map.SizeFactor, map.OffsetX),
                         0f,
-                        (float)MapCoordinates.ToWorld(point[2], map.SizeFactor, map.OffsetY)),
-                    null);
+                        (float)MapCoordinates.ToWorld(point[2], map.SizeFactor, map.OffsetY)));
                 added++;
             }
         }
@@ -228,18 +222,13 @@ public sealed class MobIndex
             if (!locationsByMob.TryGetValue(nameId, out var locations))
                 locationsByMob[nameId] = locations = [];
 
-            // Only one of the two sources carries elevation, so it is taken per
-            // territory rather than per cluster. It is a starting height for the
-            // navmesh floor query, not somewhere to path to.
-            var elevation = elevations.TryGetValue((nameId, territoryId), out var known) && known.Count > 0
-                ? known.Average()
-                : 0f;
-
             var map = territory.Map.ValueNullable;
 
             foreach (var spot in FarmSpots.Cluster(points, clusterRadius))
             {
-                var centre = spot.Centre with { Y = elevation };
+                // Height stays at zero deliberately. Neither source has any, and
+                // the caller drops the point onto the navmesh instead.
+                var centre = spot.Centre;
                 var onMap = map is { } m
                     ? new Vector2(
                         (float)MapCoordinates.ToMap(centre.X, m.SizeFactor, m.OffsetX),

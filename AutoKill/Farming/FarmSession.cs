@@ -629,15 +629,34 @@ public sealed class FarmSession
     /// </summary>
     private FarmLocation CurrentSpot => area.Spots[spotIndex % area.Spots.Count];
 
+    /// <summary>
+    /// The current spot, dropped onto the ground.
+    /// </summary>
+    /// <remarks>
+    /// Spawn data carries no height, so the search starts from high above and
+    /// falls, the same trick vnavmesh uses to turn a map flag into a point.
+    /// Starting from a height of zero asks about the middle of the world, which
+    /// in most zones is solid rock or empty sky.
+    ///
+    /// A failed query is not cached. It usually means the navmesh is still
+    /// loading, and caching the fallback would strand the run at a point it can
+    /// never reach for as long as it lasts.
+    /// </remarks>
     private Vector3 ResolveSpot()
     {
         if (resolvedSpot is { } cached)
             return cached;
 
         var spot = CurrentSpot.Position;
-        var floor = navmesh.PointOnFloor(spot, 20f);
-        resolvedSpot = floor ?? spot;
-        return resolvedSpot.Value;
+        if (navmesh.PointOnFloor(spot with { Y = 1024f }, 20f) is { } floor)
+        {
+            resolvedSpot = floor;
+            return floor;
+        }
+
+        // Somewhere plausible until the mesh can answer: the character's own
+        // height is at least a height they can stand at.
+        return spot with { Y = objects.LocalPlayer?.Position.Y ?? 0f };
     }
 
     /// <summary>
