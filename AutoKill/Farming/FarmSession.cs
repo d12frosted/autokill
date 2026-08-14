@@ -33,17 +33,28 @@ public enum FarmPhase
 public sealed class FarmSession
 {
     private const float ArrivalRange = 12f;
-    private const float EngageRange = 3f;
+    private const float MeleeRange = 3f;
+
+    // Inside the twenty five yalm cap every ranged attack shares, with room for
+    // the target to shuffle without pulling the character in after it.
+    private const float RangedRange = 20f;
     private const float HuntRadius = 90f;
 
-    // Close enough to be worth stopping for on the way past.
-    private const float DivertRadius = 35f;
+    // Anything of interest this far from the character is worth going to
+    // instead of a point on a map. A spot is only ever a guess at where mobs
+    // will be; a mob that can be seen is not a guess.
+    private const float VisionRadius = 120f;
 
     // How far a fight may wander from the spot before it stops counting.
     private const float LeashRadius = 45f;
 
     private static readonly TimeSpan MoveCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MountCooldown = TimeSpan.FromSeconds(3);
+
+    // Dismounting is cheap to ask for again and the descent takes a moment, so
+    // waiting a whole mount cooldown between attempts is most of the time spent
+    // getting out of the saddle.
+    private static readonly TimeSpan DismountRetry = TimeSpan.FromMilliseconds(400);
     private static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan SightingInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan JumpCooldown = TimeSpan.FromMilliseconds(150);
@@ -151,7 +162,7 @@ public sealed class FarmSession
                 arrivalRange = ArrivalRange,
                 engageRange = EngageRange,
                 huntRadius = HuntRadius,
-                divertRadius = DivertRadius,
+                visionRadius = VisionRadius,
                 leashRadius = LeashRadius,
             },
             targets = conditions.Conditions.Select(c => c.GetType().Name),
@@ -484,6 +495,20 @@ public sealed class FarmSession
             }
         }
 
+        // Anything visible beats the spot we were heading for. A spot is a
+        // guess at where mobs stand; a mob is where one is actually standing.
+        if (FindQuarry(player, spot, VisionRadius, 0f) is { } visible)
+        {
+            recorder?.Write("divert", new
+            {
+                distance = Math.Round(Vector3.Distance(visible.Position, player.Position), 1),
+                stillToSpot = Math.Round(remaining, 1),
+            });
+            navmesh.Stop();
+            Phase = FarmPhase.Hunting;
+            return;
+        }
+
         // Fly when the zone allows it, which is how anyone actually covers this
         // sort of distance.
         var flying = PlayerActions.IsFlying(condition);
@@ -507,24 +532,10 @@ public sealed class FarmSession
             return;
         }
 
-        // Walking through something we came here to kill and then walking back
-        // to it is daft. Flying past is left alone: landing early costs more
-        // than the detour saves.
-        if (!flying && FindQuarry(player, spot, DivertRadius, 0f) is { } passing)
-        {
-            recorder?.Write("divert", new
-            {
-                distance = Math.Round(Vector3.Distance(passing.Position, player.Position), 1),
-                stillToSpot = Math.Round(remaining, 1),
-            });
-            navmesh.Stop();
-            Phase = FarmPhase.Hunting;
-            return;
-        }
-
-        Status = flying
-            ? $"flying to {area.ZoneName} ({remaining:F0}y)"
-            : $"travelling to {area.ZoneName} ({remaining:F0}y)";
+        var where = area.Spots.Count > 1
+            ? $"spot {spotIndex % area.Spots.Count + 1} of {area.Spots.Count}"
+            : "the spot";
+        Status = $"nothing in sight, {(flying ? "flying" : "heading")} to {where}, {remaining:F0}y";
 
         if (navmesh.Moving || navmesh.PathfindInProgress || DateTime.UtcNow - lastMove < MoveCooldown)
             return;
@@ -532,6 +543,20 @@ public sealed class FarmSession
         lastMove = DateTime.UtcNow;
         if (!navmesh.MoveCloseTo(spot, ArrivalRange / 2f, flying))
             log.Warning("vnavmesh would not path to the farm spot.");
+    }
+
+    /// <summary>
+    /// How close this job needs to be. Walking a caster into melee wastes the
+    /// approach and puts it somewhere it has no business standing.
+    /// </summary>
+    private float EngageRange
+    {
+        get
+        {
+            // ClassJob roles: 1 tank, 2 melee, 3 ranged, 4 healer.
+            var role = objects.LocalPlayer?.ClassJob.ValueNullable?.Role ?? 0;
+            return role is 3 or 4 ? RangedRange : MeleeRange;
+        }
     }
 
     private FarmLocation CurrentSpot => area.Spots[spotIndex % area.Spots.Count];
@@ -586,11 +611,13 @@ public sealed class FarmSession
         var expected = observations.For(mob.BNpcNameId, area.TerritoryTypeId).TypicalRepopulation()
                        ?? TimeSpan.FromSeconds(90);
 
+        var here = objects.LocalPlayer?.Position ?? area.Centre;
         var states = area.Spots
             .Select((spot, i) => new SpotState(
                 i,
                 spot.SpawnCount,
-                clearedAt.TryGetValue(i, out var when) ? DateTime.UtcNow - when : null))
+                clearedAt.TryGetValue(i, out var when) ? DateTime.UtcNow - when : null,
+                Vector3.Distance(here, spot.Position)))
             .ToList();
 
         var next = SpotRotation.PickNext(states, from, expected, jitter: 0.25);
@@ -612,7 +639,7 @@ public sealed class FarmSession
         }
 
         var spot = ResolveSpot();
-        var quarry = FindQuarry(player, spot, LeashRadius, HuntRadius);
+        var quarry = FindQuarry(player, spot, VisionRadius, HuntRadius);
 
         if (quarry is null)
         {
@@ -643,7 +670,7 @@ public sealed class FarmSession
         // afterwards was costing minutes per run.
         if (distance > config.MountDistance)
         {
-            Status = $"closing on {mob.Name} ({distance:F0}y)";
+            Status = $"going to a {mob.Name}, {distance:F0}y away";
             Approach(player, quarry.Position, EngageRange);
             return;
         }
@@ -655,7 +682,7 @@ public sealed class FarmSession
             Status = "dismounting";
             if (navmesh.Moving)
                 navmesh.Stop();
-            if (DateTime.UtcNow - lastMountAction >= MountCooldown)
+            if (DateTime.UtcNow - lastMountAction >= DismountRetry)
             {
                 lastMountAction = DateTime.UtcNow;
                 recorder?.Write("dismount", new { distance = Math.Round(distance, 1) });
@@ -677,9 +704,7 @@ public sealed class FarmSession
         if (targets.Target?.GameObjectId != quarry.GameObjectId)
             targets.Target = quarry;
 
-        Status = area.Spots.Count > 1
-            ? $"killing {mob.Name}, spot {spotIndex % area.Spots.Count + 1} of {area.Spots.Count}"
-            : $"killing {mob.Name}";
+        Status = $"killing a {mob.Name}, {Nearby(player)} in sight";
 
         if (distance <= EngageRange)
         {
@@ -719,7 +744,9 @@ public sealed class FarmSession
             return;
         }
 
-        Status = area.Spots.Count > 1 ? "cleared, moving on" : "waiting for respawns";
+        Status = area.Spots.Count > 1
+            ? $"spot {spotIndex % area.Spots.Count + 1} cleared, moving on"
+            : "waiting for respawns";
 
         if (Vector3.Distance(player.Position, spot) > ArrivalRange)
             Approach(player, spot, ArrivalRange / 2f);
@@ -769,6 +796,14 @@ public sealed class FarmSession
         lastMove = DateTime.UtcNow;
         navmesh.MoveCloseTo(destination, range, flying);
     }
+
+    /// <summary>How many of the quarry are in sight, for saying so.</summary>
+    private int Nearby(IPlayerCharacter player) =>
+        objects.OfType<IBattleNpc>()
+            .Count(npc => npc.NameId == mob.BNpcNameId
+                          && !npc.IsDead
+                          && npc.CurrentHp > 0
+                          && Vector3.Distance(npc.Position, player.Position) <= VisionRadius);
 
     /// <summary>
     /// Distance ignoring height. Altitude says nothing about whether the right
