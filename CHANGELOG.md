@@ -3,6 +3,18 @@
 What changed in each release, written for people using the plugin rather than
 reading the diff. Dates are when the tag went out.
 
+## Unreleased
+
+### Added
+
+- **A Hunts tab.** The hunt bills you are carrying, read out of the client, with
+  each unfinished target offered in the zone the bill names and the kill goal
+  set to what is left rather than the whole bill. The counts are the game's own,
+  so they are right about kills from before you opened the window.
+
+  Elite bills are left out. Those are the B, A and S rank marks, which are one
+  rare spawn rather than something to grind.
+
 ## 0.0.3 - 2026-08-14
 
 ### Added
