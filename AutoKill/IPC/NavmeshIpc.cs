@@ -1,6 +1,7 @@
 using System.Numerics;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Ipc;
+using Dalamud.Plugin.Services;
 
 namespace AutoKill.IPC;
 
@@ -10,7 +11,7 @@ namespace AutoKill.IPC;
 /// still be building a mesh for the zone that was just loaded, and none of those
 /// should be an exception escaping into the farming loop.
 /// </remarks>
-public sealed class NavmeshIpc(IDalamudPluginInterface plugin)
+public sealed class NavmeshIpc(IDalamudPluginInterface plugin, IPluginLog log)
 {
     private readonly ICallGateSubscriber<bool> isReady =
         plugin.GetIpcSubscriber<bool>("vnavmesh.Nav.IsReady");
@@ -36,6 +37,9 @@ public sealed class NavmeshIpc(IDalamudPluginInterface plugin)
     private readonly ICallGateSubscriber<Vector3, bool, float, Vector3?> pointOnFloor =
         plugin.GetIpcSubscriber<Vector3, bool, float, Vector3?>("vnavmesh.Query.Mesh.PointOnFloor");
 
+    private readonly ICallGateSubscriber<object> cancelPathfinding =
+        plugin.GetIpcSubscriber<object>("vnavmesh.Nav.PathfindCancelAll");
+
     public bool Available => Try(() => isReady.InvokeFunc(), false);
 
     /// <summary>True once a mesh exists for the current zone.</summary>
@@ -53,7 +57,30 @@ public sealed class NavmeshIpc(IDalamudPluginInterface plugin)
     public bool MoveCloseTo(Vector3 destination, float range, bool fly = false) =>
         Try(() => moveCloseTo.InvokeFunc(destination, fly, range), false);
 
+    /// <summary>Drop the current path. Anything already being worked out still lands.</summary>
     public void Stop() => Try<object?>(() => { stop.InvokeAction(); return null; }, null);
+
+    /// <summary>
+    /// Stop for good: drop the path and throw away anything still being worked
+    /// out.
+    /// </summary>
+    /// <remarks>
+    /// Dropping the path alone is not enough to stop a character. A pathfind
+    /// already in flight finishes afterwards and starts walking the result,
+    /// which looks exactly like a stop button that does nothing.
+    ///
+    /// Cancelling costs vnavmesh a mesh reload, so it is only done when a
+    /// pathfind is actually outstanding rather than on every ordinary halt.
+    /// </remarks>
+    public void StopCompletely()
+    {
+        Stop();
+
+        if (!PathfindInProgress)
+            return;
+
+        Try<object?>(() => { cancelPathfinding.InvokeAction(); return null; }, null);
+    }
 
     /// <summary>
     /// Drop a point onto the ground. Published spawn data carries no usable
@@ -63,14 +90,21 @@ public sealed class NavmeshIpc(IDalamudPluginInterface plugin)
     public Vector3? PointOnFloor(Vector3 position, float halfExtentXZ = 5f) =>
         Try(() => pointOnFloor.InvokeFunc(position, false, halfExtentXZ), null);
 
-    private static T Try<T>(Func<T> call, T fallback)
+    /// <summary>
+    /// vnavmesh may be absent, disabled, or still loading a zone. None of those
+    /// should reach the farming loop, but none of them should pass unnoticed
+    /// either: a silently swallowed failure here is a control that appears to
+    /// work and does nothing.
+    /// </summary>
+    private T Try<T>(Func<T> call, T fallback)
     {
         try
         {
             return call();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            log.Warning($"vnavmesh call failed: {ex.Message}");
             return fallback;
         }
     }

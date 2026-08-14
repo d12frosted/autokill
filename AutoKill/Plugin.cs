@@ -41,7 +41,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
 
-        var navmesh = new NavmeshIpc(PluginInterface);
+        var navmesh = new NavmeshIpc(PluginInterface, Log);
         notifier = new Notifier(ChatGui, Toast) { Enabled = config.Notifications };
         wrath = new WrathIpc(PluginInterface, Log);
         farming = new FarmController(

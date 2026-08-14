@@ -265,7 +265,7 @@ public sealed class FarmSession
         Status = reason;
         recorder?.Write("finish", new { reason, kills, elapsed = progress.Elapsed.TotalSeconds });
         recorder?.Dispose();
-        navmesh.Stop();
+        navmesh.StopCompletely();
         wrath.Stop();
         log.Information($"Farming {mob.Name} stopped: {reason}");
 
