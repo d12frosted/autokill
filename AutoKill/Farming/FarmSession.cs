@@ -107,6 +107,9 @@ public sealed class FarmSession
 
     public FarmLocation Location => location;
 
+    /// <summary>What the run is aiming at, so progress can be shown against it.</summary>
+    public StopConditions Conditions => conditions;
+
     public int Kills => kills;
 
     public FarmProgress Progress => new(

@@ -76,10 +76,32 @@ public sealed class MainWindow : Window
         var progress = session.Progress;
         ImGui.TextUnformatted($"{session.Mob.Name} in {session.Location.ZoneName}");
         ImGui.TextDisabled($"{session.Phase}: {session.Status}");
-        ImGui.TextDisabled($"kills {progress.Kills}   elapsed {progress.Elapsed:hh\\:mm\\:ss}");
 
-        foreach (var (itemId, count) in progress.ItemsGained)
-            ImGui.TextDisabled($"{mobs.ItemName(itemId)} x{count}");
+        // Counts read against their target where one was set, and plainly where
+        // none was: "3" and "3/50" say different things and only one of them is
+        // ever true.
+        var killTarget = session.Conditions.Conditions.OfType<KillCountCondition>().FirstOrDefault();
+        var timeTarget = session.Conditions.Conditions.OfType<ElapsedCondition>().FirstOrDefault();
+
+        var kills = killTarget is null ? $"kills {progress.Kills}" : $"kills {progress.Kills}/{killTarget.Target}";
+        var elapsed = timeTarget is null
+            ? $"elapsed {progress.Elapsed:hh\\:mm\\:ss}"
+            : $"elapsed {progress.Elapsed:hh\\:mm\\:ss}/{timeTarget.Limit:hh\\:mm\\:ss}";
+        ImGui.TextDisabled($"{kills}   {elapsed}");
+
+        var itemTargets = session.Conditions.Conditions
+            .OfType<ItemCountCondition>()
+            .ToDictionary(c => c.ItemId, c => c.Target);
+
+        // Wanted items are listed from the start, at zero, rather than appearing
+        // once the first one drops. A target sitting at nothing is information.
+        foreach (var itemId in itemTargets.Keys.Concat(progress.ItemsGained.Keys).Distinct())
+        {
+            var have = progress.CountOf(itemId);
+            ImGui.TextDisabled(itemTargets.TryGetValue(itemId, out var target)
+                ? $"{mobs.ItemName(itemId)} {have}/{target}"
+                : $"{mobs.ItemName(itemId)} x{have}");
+        }
 
         if (ImGui.Button("Stop"))
             farming.Stop();
