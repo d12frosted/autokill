@@ -20,7 +20,22 @@ public sealed record FarmSpot(Vector3 Centre, int Count);
 /// </remarks>
 public static class FarmSpots
 {
-    public static IReadOnlyList<FarmSpot> Cluster(IReadOnlyList<Vector3> points, float radius)
+    public static IReadOnlyList<FarmSpot> Cluster(IReadOnlyList<Vector3> points, float radius) =>
+        Group(points, radius)
+            .Select(group => new FarmSpot(
+                new Vector3(
+                    group.Average(p => p.X),
+                    group.Average(p => p.Y),
+                    group.Average(p => p.Z)),
+                group.Count))
+            .ToList();
+
+    /// <summary>
+    /// The same grouping, keeping the members. Spots are grouped into areas the
+    /// same way points are grouped into spots, and an area is patrolled by
+    /// visiting the spots that make it up, so which went where has to survive.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<Vector3>> Group(IReadOnlyList<Vector3> points, float radius)
     {
         if (points.Count == 0)
             return [];
@@ -64,16 +79,11 @@ public static class FarmSpots
         }
 
         return groups.Values
-            .Select(group => new FarmSpot(
-                new Vector3(
-                    group.Average(p => p.X),
-                    group.Average(p => p.Y),
-                    group.Average(p => p.Z)),
-                group.Count))
             // Densest first, then by position so output does not depend on input order.
-            .OrderByDescending(spot => spot.Count)
-            .ThenBy(spot => spot.Centre.X)
-            .ThenBy(spot => spot.Centre.Z)
+            .OrderByDescending(group => group.Count)
+            .ThenBy(group => group.Average(p => p.X))
+            .ThenBy(group => group.Average(p => p.Z))
+            .Cast<IReadOnlyList<Vector3>>()
             .ToList();
     }
 }

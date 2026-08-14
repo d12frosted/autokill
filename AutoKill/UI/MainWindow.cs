@@ -25,7 +25,7 @@ public sealed class MainWindow : Window
     private MobEntry? selectedMob;
 
     private MobEntry? plannedMob;
-    private FarmLocation? plannedLocation;
+    private FarmArea? plannedArea;
     private readonly Dictionary<uint, int> itemGoals = [];
     private int killTarget;
     private int minuteTarget;
@@ -57,8 +57,8 @@ public sealed class MainWindow : Window
 
         if (farming.Running)
             DrawSession(mobs);
-        else if (plannedMob is not null && plannedLocation is not null)
-            DrawPlan(mobs, plannedMob, plannedLocation);
+        else if (plannedMob is not null && plannedArea is not null)
+            DrawPlan(mobs, plannedMob, plannedArea);
 
         using var tabs = ImRaii.TabBar("##autokill-tabs");
         if (!tabs)
@@ -74,7 +74,7 @@ public sealed class MainWindow : Window
             return;
 
         var progress = session.Progress;
-        ImGui.TextUnformatted($"{session.Mob.Name} in {session.Location.ZoneName}");
+        ImGui.TextUnformatted($"{session.Mob.Name} in {session.Area.ZoneName}");
         ImGui.TextDisabled($"{session.Phase}: {session.Status}");
 
         // Counts read against their target where one was set, and plainly where
@@ -109,12 +109,13 @@ public sealed class MainWindow : Window
         ImGui.Separator();
     }
 
-    private void DrawPlan(MobIndex mobs, MobEntry mob, FarmLocation location)
+    private void DrawPlan(MobIndex mobs, MobEntry mob, FarmArea area)
     {
         ImGui.TextUnformatted($"Farm {mob.Name}");
         ImGui.TextDisabled(
-            $"{location.ZoneName}  ({location.MapPosition.X:F1}, {location.MapPosition.Y:F1})  "
-            + $"x{location.SpawnCount}");
+            $"{area.ZoneName}  ({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})  "
+            + $"{area.SpawnCount} spawns"
+            + (area.Spots.Count > 1 ? $" across {area.Spots.Count} spots" : string.Empty));
 
         ImGui.Spacing();
         ImGui.TextDisabled("Stop when");
@@ -165,7 +166,7 @@ public sealed class MainWindow : Window
 
         if (ImGui.Button("Start"))
         {
-            farming.Start(mob, location, BuildConditions());
+            farming.Start(mob, area, BuildConditions());
             ClearPlan();
         }
 
@@ -176,10 +177,10 @@ public sealed class MainWindow : Window
         ImGui.Separator();
     }
 
-    private void Plan(MobEntry mob, FarmLocation location)
+    private void Plan(MobEntry mob, FarmArea area)
     {
         plannedMob = mob;
-        plannedLocation = location;
+        plannedArea = area;
         itemGoals.Clear();
 
         // Arriving from an item search means the item is already known, so do
@@ -191,7 +192,7 @@ public sealed class MainWindow : Window
     private void ClearPlan()
     {
         plannedMob = null;
-        plannedLocation = null;
+        plannedArea = null;
     }
 
     private StopConditions BuildConditions()
@@ -298,20 +299,21 @@ public sealed class MainWindow : Window
             return;
         }
 
-        foreach (var location in mob.Locations.Take(5))
+        foreach (var area in mob.Areas.Take(5))
         {
-            using var id = ImRaii.PushId($"{mob.BNpcNameId}-{location.TerritoryTypeId}-{location.Position.X:F0}");
+            using var id = ImRaii.PushId($"{mob.BNpcNameId}-{area.TerritoryTypeId}-{area.Centre.X:F0}");
 
             if (ImGui.SmallButton("Choose"))
-                Plan(mob, location);
+                Plan(mob, area);
 
             ImGui.SameLine();
             ImGui.TextDisabled(
-                $"{location.ZoneName}  ({location.MapPosition.X:F1}, {location.MapPosition.Y:F1})  "
-                + $"x{location.SpawnCount}");
+                $"{area.ZoneName}  ({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})  "
+                + $"{area.SpawnCount} spawns"
+                + (area.Spots.Count > 1 ? $" over {area.Spots.Count} spots" : string.Empty));
         }
 
-        if (mob.Locations.Count > 5)
-            ImGui.TextDisabled($"... and {mob.Locations.Count - 5} more");
+        if (mob.Areas.Count > 5)
+            ImGui.TextDisabled($"... and {mob.Areas.Count - 5} more");
     }
 }

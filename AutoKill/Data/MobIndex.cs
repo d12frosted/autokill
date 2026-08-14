@@ -22,14 +22,33 @@ public sealed record FarmLocation(
     int SpawnCount,
     ushort Level);
 
+/// <summary>
+/// A stretch of ground worth farming, and the spots inside it.
+/// </summary>
+/// <remarks>
+/// A single spot is not how anyone farms. Mobs of one kind are spread over a
+/// field in several loose knots, and the way to clear them is a circuit rather
+/// than standing on one knot waiting. So spots that are close enough to patrol
+/// between are gathered into an area, and the area is what gets chosen.
+/// </remarks>
+public sealed record FarmArea(
+    uint TerritoryTypeId,
+    string ZoneName,
+    Vector3 Centre,
+    Vector2 MapCentre,
+    IReadOnlyList<FarmLocation> Spots)
+{
+    public int SpawnCount => Spots.Sum(s => s.SpawnCount);
+}
+
 public sealed record MobEntry(
     uint BNpcNameId,
     string Name,
     IReadOnlyList<uint> BaseIds,
-    IReadOnlyList<FarmLocation> Locations,
+    IReadOnlyList<FarmArea> Areas,
     IReadOnlyList<uint> Drops)
 {
-    public bool Farmable => Locations.Count > 0;
+    public bool Farmable => Areas.Count > 0;
 }
 
 /// <summary>
@@ -48,6 +67,10 @@ public sealed record MobEntry(
 /// </remarks>
 public sealed class MobIndex
 {
+    // Spots this far apart are still one circuit. Wide enough to take in a
+    // field of mobs, narrow enough not to swallow the whole zone.
+    private const float AreaRadius = 250f;
+
     private readonly Dictionary<uint, MobEntry> byNameId;
     private readonly Dictionary<uint, List<uint>> mobsByItem;
     private readonly Dictionary<uint, string> droppableItemNames;
@@ -233,13 +256,12 @@ public sealed class MobIndex
                 continue;
 
             var locations = locationsByMob.GetValueOrDefault(nameId) ?? [];
-            locations.Sort((a, b) => b.SpawnCount.CompareTo(a.SpawnCount));
 
             byNameId[nameId] = new MobEntry(
                 nameId,
                 label,
                 baseIds.GetValueOrDefault(nameId)?.ToList() ?? [],
-                locations,
+                IntoAreas(locations),
                 dropsByMob.GetValueOrDefault(nameId)?.ToList() ?? []);
         }
 
@@ -249,6 +271,39 @@ public sealed class MobIndex
             + $"{droppableItemNames.Count} droppable items.");
 
         return new MobIndex(byNameId, mobsByItem, droppableItemNames);
+    }
+
+    /// <summary>
+    /// Gather spots into the areas they belong to, one territory at a time.
+    /// Coordinates only compare within a territory, and no circuit crosses one.
+    /// </summary>
+    private static IReadOnlyList<FarmArea> IntoAreas(List<FarmLocation> spots)
+    {
+        var areas = new List<FarmArea>();
+
+        foreach (var byTerritory in spots.GroupBy(s => s.TerritoryTypeId))
+        {
+            var inTerritory = byTerritory.ToList();
+            var centres = inTerritory.Select(s => s.Position).ToList();
+
+            foreach (var group in FarmSpots.Group(centres, AreaRadius))
+            {
+                var members = group
+                    .Select(point => inTerritory.First(s => s.Position == point))
+                    .OrderByDescending(s => s.SpawnCount)
+                    .ToList();
+
+                var first = members[0];
+                areas.Add(new FarmArea(
+                    first.TerritoryTypeId,
+                    first.ZoneName,
+                    new Vector3(group.Average(p => p.X), group.Average(p => p.Y), group.Average(p => p.Z)),
+                    new Vector2(members.Average(s => s.MapPosition.X), members.Average(s => s.MapPosition.Y)),
+                    members));
+            }
+        }
+
+        return areas.OrderByDescending(a => a.SpawnCount).ToList();
     }
 
     public MobEntry? Get(uint bNpcNameId) => byNameId.GetValueOrDefault(bNpcNameId);
@@ -266,7 +321,7 @@ public sealed class MobIndex
         return byNameId.Values
             .Where(mob => mob.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(mob => mob.Farmable)
-            .ThenByDescending(mob => mob.Locations.Sum(l => l.SpawnCount))
+            .ThenByDescending(mob => mob.Areas.Sum(a => a.SpawnCount))
             .ThenBy(mob => mob.Name, StringComparer.OrdinalIgnoreCase)
             .Take(limit)
             .ToList();
@@ -302,8 +357,8 @@ public sealed class MobIndex
             .Where(mob => mob is not null)
             .Select(mob => mob!)
             .OrderByDescending(mob => mob.Farmable)
-            .ThenByDescending(mob => mob.Locations.Count > 0 ? mob.Locations[0].SpawnCount : 0)
-            .ThenByDescending(mob => mob.Locations.Sum(l => l.SpawnCount))
+            .ThenByDescending(mob => mob.Areas.Count > 0 ? mob.Areas[0].SpawnCount : 0)
+            .ThenByDescending(mob => mob.Areas.Sum(a => a.SpawnCount))
             .ToList();
     }
 }

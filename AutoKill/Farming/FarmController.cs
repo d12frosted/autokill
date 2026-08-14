@@ -49,12 +49,12 @@ public sealed class FarmController : IDisposable
     public string? Blocker =>
         !navmesh.Available ? "vnavmesh is not responding, so nothing can move." : null;
 
-    public void Start(MobEntry mob, FarmLocation location, StopConditions conditions)
+    public void Start(MobEntry mob, FarmArea area, StopConditions conditions)
     {
         Stop("replaced");
         Current = new FarmSession(
-            mob, location, conditions, navmesh, wrath, clientState, objects, targets, data, condition, log);
-        log.Information($"Farming {mob.Name} in {location.ZoneName}.");
+            mob, area, conditions, navmesh, wrath, clientState, objects, targets, data, condition, log);
+        log.Information($"Farming {mob.Name} in {area.ZoneName}, {area.Spots.Count} spot(s).");
     }
 
     public void Stop(string reason = "stopped")

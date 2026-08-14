@@ -42,8 +42,11 @@ public sealed class FarmSession
     private static readonly TimeSpan MountCooldown = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan TeleportCooldown = TimeSpan.FromSeconds(10);
 
+    // How long an emptied spot is given before moving on round the circuit.
+    private static readonly TimeSpan RespawnPatience = TimeSpan.FromSeconds(6);
+
     private readonly MobEntry mob;
-    private readonly FarmLocation location;
+    private readonly FarmArea area;
     private readonly StopConditions conditions;
     private readonly NavmeshIpc navmesh;
     private readonly WrathIpc wrath;
@@ -64,11 +67,13 @@ public sealed class FarmSession
     private bool flagged;
     private DateTime lastTeleport = DateTime.MinValue;
     private Vector3? resolvedSpot;
+    private int spotIndex;
+    private DateTime? emptySince;
     private int kills;
 
     public FarmSession(
         MobEntry mob,
-        FarmLocation location,
+        FarmArea area,
         StopConditions conditions,
         NavmeshIpc navmesh,
         WrathIpc wrath,
@@ -80,7 +85,7 @@ public sealed class FarmSession
         IPluginLog log)
     {
         this.mob = mob;
-        this.location = location;
+        this.area = area;
         this.conditions = conditions;
         this.navmesh = navmesh;
         this.wrath = wrath;
@@ -105,7 +110,7 @@ public sealed class FarmSession
 
     public MobEntry Mob => mob;
 
-    public FarmLocation Location => location;
+    public FarmArea Area => area;
 
     /// <summary>What the run is aiming at, so progress can be shown against it.</summary>
     public StopConditions Conditions => conditions;
@@ -170,7 +175,7 @@ public sealed class FarmSession
 
     private void TickTeleport(IPlayerCharacter player)
     {
-        if (clientState.TerritoryType == location.TerritoryTypeId)
+        if (clientState.TerritoryType == area.TerritoryTypeId)
         {
             Phase = FarmPhase.Travelling;
             return;
@@ -184,26 +189,26 @@ public sealed class FarmSession
 
         if (DateTime.UtcNow - lastTeleport < TeleportCooldown)
         {
-            Status = $"teleporting to {location.ZoneName}";
+            Status = $"teleporting to {area.ZoneName}";
             return;
         }
 
-        var aetheryte = Aetherytes.AttunedIn(data, location.TerritoryTypeId);
+        var aetheryte = Aetherytes.AttunedIn(data, area.TerritoryTypeId);
         if (aetheryte is not { } id)
         {
-            Finish($"no attuned aetheryte in {location.ZoneName}");
+            Finish($"no attuned aetheryte in {area.ZoneName}");
             return;
         }
 
         lastTeleport = DateTime.UtcNow;
-        Status = $"teleporting to {location.ZoneName}";
+        Status = $"teleporting to {area.ZoneName}";
         if (!Aetherytes.Teleport(id))
             log.Warning($"Teleport to aetheryte {id} was refused.");
     }
 
     private void TickTravel(IPlayerCharacter player)
     {
-        if (clientState.TerritoryType != location.TerritoryTypeId)
+        if (clientState.TerritoryType != area.TerritoryTypeId)
         {
             Phase = FarmPhase.Teleporting;
             return;
@@ -224,7 +229,7 @@ public sealed class FarmSession
         // the character is heading is visible rather than a mystery.
         if (!flagged)
         {
-            PlayerActions.FlagDestination(data, location.TerritoryTypeId, spot);
+            PlayerActions.FlagDestination(data, area.TerritoryTypeId, spot);
             flagged = true;
         }
 
@@ -267,8 +272,8 @@ public sealed class FarmSession
         // path, and let the descent to a ground level spot do the landing.
         var flying = PlayerActions.IsFlying(condition);
         Status = flying
-            ? $"flying to {location.ZoneName} ({remaining:F0}y)"
-            : $"travelling to {location.ZoneName} ({remaining:F0}y)";
+            ? $"flying to {area.ZoneName} ({remaining:F0}y)"
+            : $"travelling to {area.ZoneName} ({remaining:F0}y)";
 
         if (navmesh.Moving || navmesh.PathfindInProgress || DateTime.UtcNow - lastMove < MoveCooldown)
             return;
@@ -280,7 +285,7 @@ public sealed class FarmSession
 
     private void TickHunt(IPlayerCharacter player)
     {
-        if (clientState.TerritoryType != location.TerritoryTypeId)
+        if (clientState.TerritoryType != area.TerritoryTypeId)
         {
             Phase = FarmPhase.Teleporting;
             return;
@@ -350,9 +355,18 @@ public sealed class FarmSession
 
         if (quarry is null)
         {
-            // Nothing up. Drift back to the middle of the spot so respawns land
-            // around us rather than behind wherever the last pull ended.
-            Status = "waiting for respawns";
+            emptySince ??= DateTime.UtcNow;
+
+            // Cleared. Standing about waiting for a respawn timer wastes the
+            // rest of the area, so move on round the circuit instead; by the
+            // time it comes back here this knot has repopulated.
+            if (DateTime.UtcNow - emptySince >= RespawnPatience)
+            {
+                AdvanceSpot();
+                return;
+            }
+
+            Status = area.Spots.Count > 1 ? "cleared, moving on" : "waiting for respawns";
             if (Vector3.Distance(player.Position, spot) > ArrivalRange
                 && !navmesh.Moving
                 && DateTime.UtcNow - lastMove >= MoveCooldown)
@@ -364,12 +378,16 @@ public sealed class FarmSession
             return;
         }
 
+        emptySince = null;
+
         engaged.Add(quarry.GameObjectId);
         if (targets.Target?.GameObjectId != quarry.GameObjectId)
             targets.Target = quarry;
 
         var distance = Vector3.Distance(player.Position, quarry.Position);
-        Status = $"killing {mob.Name} ({kills} down)";
+        Status = area.Spots.Count > 1
+            ? $"killing {mob.Name}, spot {spotIndex % area.Spots.Count + 1} of {area.Spots.Count}"
+            : $"killing {mob.Name}";
 
         if (distance <= EngageRange)
         {
@@ -389,14 +407,39 @@ public sealed class FarmSession
     /// The recorded spot dropped onto the ground. Published data carries no
     /// usable height, so pathing to it raw either fails or aims at the sky.
     /// </summary>
+    private FarmLocation CurrentSpot => area.Spots[spotIndex % area.Spots.Count];
+
     private Vector3 ResolveSpot()
     {
         if (resolvedSpot is { } cached)
             return cached;
 
-        var floor = navmesh.PointOnFloor(location.Position, 20f);
-        resolvedSpot = floor ?? location.Position;
+        var spot = CurrentSpot.Position;
+        var floor = navmesh.PointOnFloor(spot, 20f);
+        resolvedSpot = floor ?? spot;
         return resolvedSpot.Value;
+    }
+
+    /// <summary>
+    /// Move on to the next knot of the circuit. Going back through travelling
+    /// rather than walking there from the hunt is deliberate: travelling already
+    /// knows how to mount, fly and flag the map, and the next spot is exactly
+    /// the kind of distance that is worth doing all three for.
+    /// </summary>
+    private void AdvanceSpot()
+    {
+        if (area.Spots.Count <= 1)
+        {
+            emptySince = null;
+            return;
+        }
+
+        spotIndex = (spotIndex + 1) % area.Spots.Count;
+        resolvedSpot = null;
+        flagged = false;
+        emptySince = null;
+        navmesh.Stop();
+        Phase = FarmPhase.Travelling;
     }
 
     /// <summary>

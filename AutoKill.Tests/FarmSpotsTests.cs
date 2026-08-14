@@ -77,6 +77,32 @@ public class FarmSpotsTests
     }
 
     [Fact]
+    public void GroupingKeepsTheMembersOfEachGroup()
+    {
+        // Spots have to be grouped into areas without losing which spots went
+        // where, because an area is patrolled by visiting its members.
+        var groups = FarmSpots.Group([At(0, 0), At(10, 0), At(500, 0)], 30f);
+
+        Assert.Equal(2, groups.Count);
+        Assert.Equal(2, groups[0].Count);
+        Assert.Single(groups[1]);
+        Assert.Contains(At(10, 0), groups[0]);
+    }
+
+    [Fact]
+    public void GroupingReturnsNothingForNoPoints()
+    {
+        Assert.Empty(FarmSpots.Group([], 30f));
+    }
+
+    [Fact]
+    public void GroupsAreSortedBySizeDescending()
+    {
+        var groups = FarmSpots.Group([At(0, 0), At(500, 0), At(505, 0), At(510, 0)], 30f);
+        Assert.Equal([3, 1], groups.Select(g => g.Count));
+    }
+
+    [Fact]
     public void OrderingIsStableForEqualCounts()
     {
         var a = FarmSpots.Cluster([At(500, 0), At(0, 0)], 30f);
