@@ -20,3 +20,4 @@ Status values: `Proposed`, `Accepted`, `Superseded by NNNN`, `Rejected`.
 | [0009](0009-core-split-for-testing.md) | A core library that never sees the game | Accepted |
 | [0010](0010-installing-as-a-dev-plugin.md) | Installing as a dev plugin | Accepted |
 | [0011](0011-crafting-lists-from-artisans-config.md) | Crafting lists from Artisan's config file | Accepted |
+| [0012](0012-hunt-bills-come-from-the-client.md) | Hunt bills come from the client | Accepted |
