@@ -274,13 +274,15 @@ do_install() {
     fi
 
     if [ "$DRY" -eq 1 ]; then
-        info "  would: copy $(find "$BUILD_DIR" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ') files to $INSTALL_DIR"
+        info "  would: copy the build to $INSTALL_DIR"
     else
         info "installing -> $INSTALL_DIR"
         mkdir -p "$INSTALL_DIR"
         # clear first so files dropped between builds do not linger
         find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-        find "$BUILD_DIR" -maxdepth 1 -type f -exec cp {} "$INSTALL_DIR/" \;
+        # everything, not just the top level: dalamud reads a dev plugin's icon
+        # from images/icon.png beside the assembly
+        cp -R "$BUILD_DIR"/. "$INSTALL_DIR/"
     fi
 
     if [ "$needs_change" = "no" ]; then

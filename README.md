@@ -1,3 +1,5 @@
+<img src="assets/icon.svg" alt="" width="128" align="right">
+
 # AutoKill
 
 Pick a mob, or pick something you want it to drop, and AutoKill goes and farms it. It
