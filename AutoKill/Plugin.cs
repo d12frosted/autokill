@@ -52,7 +52,7 @@ public sealed class Plugin : IDalamudPlugin
             Framework, navmesh, wrath, ClientState, Objects, Targets, DataManager, Condition, notifier,
             itemId => index?.ItemName(itemId) ?? $"item {itemId}", config, NewRecorder, observations, Log);
 
-        mainWindow = new MainWindow(() => index, farming, Textures, config, Save);
+        mainWindow = new MainWindow(() => index, farming, Textures, config, observations, Save);
         windows.AddWindow(mainWindow);
 
         PluginInterface.UiBuilder.Draw += windows.Draw;

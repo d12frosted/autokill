@@ -75,17 +75,20 @@ public sealed class MobIndex
     private readonly Dictionary<uint, List<uint>> mobsByItem;
     private readonly Dictionary<uint, string> droppableItemNames;
     private readonly Dictionary<uint, ushort> droppableItemIcons;
+    private readonly Dictionary<uint, string> zoneNames;
 
     private MobIndex(
         Dictionary<uint, MobEntry> byNameId,
         Dictionary<uint, List<uint>> mobsByItem,
         Dictionary<uint, string> droppableItemNames,
-        Dictionary<uint, ushort> droppableItemIcons)
+        Dictionary<uint, ushort> droppableItemIcons,
+        Dictionary<uint, string> zoneNames)
     {
         this.byNameId = byNameId;
         this.mobsByItem = mobsByItem;
         this.droppableItemNames = droppableItemNames;
         this.droppableItemIcons = droppableItemIcons;
+        this.zoneNames = zoneNames;
     }
 
     public IReadOnlyCollection<MobEntry> Mobs => byNameId.Values;
@@ -212,12 +215,14 @@ public sealed class MobIndex
         }
 
         var locationsByMob = new Dictionary<uint, List<FarmLocation>>();
+        var zoneNames = new Dictionary<uint, string>();
         foreach (var ((nameId, territoryId), points) in grouped)
         {
             if (!territories.TryGetRow(territoryId, out var territory))
                 continue;
 
             var zone = territory.PlaceName.ValueNullable?.Name.ExtractText() ?? string.Empty;
+            zoneNames[territoryId] = zone;
 
             if (!locationsByMob.TryGetValue(nameId, out var locations))
                 locationsByMob[nameId] = locations = [];
@@ -264,7 +269,7 @@ public sealed class MobIndex
             + $"{byNameId.Values.Count(m => m.Farmable)} farmable, "
             + $"{droppableItemNames.Count} droppable items.");
 
-        return new MobIndex(byNameId, mobsByItem, droppableItemNames, droppableItemIcons);
+        return new MobIndex(byNameId, mobsByItem, droppableItemNames, droppableItemIcons, zoneNames);
     }
 
     /// <summary>
@@ -308,6 +313,12 @@ public sealed class MobIndex
 
     /// <summary>The item's icon id, or zero when there is nothing to draw.</summary>
     public ushort ItemIcon(uint itemId) => droppableItemIcons.GetValueOrDefault(itemId);
+
+    /// <summary>The name of a zone, for naming things learnt elsewhere.</summary>
+    public string ZoneName(uint territoryId) =>
+        zoneNames.TryGetValue(territoryId, out var name) && name.Length > 0
+            ? name
+            : $"territory {territoryId}";
 
     /// <summary>Mobs whose name contains the query, the ones you can actually reach first.</summary>
     public IReadOnlyList<MobEntry> SearchMobs(string query, int limit = 50)

@@ -74,6 +74,40 @@ public sealed class Observations
         }
     }
 
+    /// <summary>Everything learnt so far, for showing and for forgetting.</summary>
+    public IEnumerable<(uint MobId, uint TerritoryId, MobObservations What)> Entries =>
+        entries
+            .Select(pair =>
+            {
+                var parts = pair.Key.Split(':');
+                return uint.TryParse(parts.ElementAtOrDefault(0), out var mob)
+                       && uint.TryParse(parts.ElementAtOrDefault(1), out var territory)
+                    ? ((uint MobId, uint TerritoryId, MobObservations What)?)(mob, territory, pair.Value)
+                    : null;
+            })
+            .Where(entry => entry is not null)
+            .Select(entry => entry!.Value)
+            .OrderByDescending(entry => entry.What.Kills);
+
+    public void Forget(uint bNpcNameId, uint territoryId)
+    {
+        if (!entries.Remove($"{bNpcNameId}:{territoryId}"))
+            return;
+
+        dirty = true;
+        Save();
+    }
+
+    public void ForgetEverything()
+    {
+        if (entries.Count == 0)
+            return;
+
+        entries = [];
+        dirty = true;
+        Save();
+    }
+
     public MobObservations For(uint bNpcNameId, uint territoryId)
     {
         var key = $"{bNpcNameId}:{territoryId}";

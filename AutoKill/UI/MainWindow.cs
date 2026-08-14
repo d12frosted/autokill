@@ -29,6 +29,7 @@ public sealed class MainWindow : Window
     private readonly FarmController farming;
     private readonly ITextureProvider textures;
     private readonly Configuration config;
+    private readonly Observations observations;
     private readonly Action saveConfig;
 
     private string mobQuery = string.Empty;
@@ -50,6 +51,7 @@ public sealed class MainWindow : Window
         FarmController farming,
         ITextureProvider textures,
         Configuration config,
+        Observations observations,
         Action saveConfig)
         : base("AutoKill###AutoKillMain")
     {
@@ -57,6 +59,7 @@ public sealed class MainWindow : Window
         this.farming = farming;
         this.textures = textures;
         this.config = config;
+        this.observations = observations;
         this.saveConfig = saveConfig;
         SizeConstraints = new WindowSizeConstraints
         {
@@ -109,7 +112,78 @@ public sealed class MainWindow : Window
 
         DrawMobTab(mobs);
         DrawDropTab(mobs);
+        DrawLearnedTab(mobs);
         DrawSettingsTab();
+    }
+
+    /// <summary>
+    /// What farming has taught the plugin, and a way to throw it away.
+    /// </summary>
+    /// <remarks>
+    /// Learnt data changes how a run behaves, so it should be possible to see it
+    /// and be rid of it. A zone reworked in a patch, or a stretch of bad luck
+    /// recorded as slow respawns, is worth forgetting rather than living with.
+    /// </remarks>
+    private void DrawLearnedTab(MobIndex mobs)
+    {
+        using var tab = ImRaii.TabItem("Learned");
+        if (!tab)
+            return;
+
+        var entries = observations.Entries.ToList();
+        if (entries.Count == 0)
+        {
+            ImGui.Spacing();
+            ImGui.TextDisabled("Nothing learnt yet. Farm something and this fills in.");
+            return;
+        }
+
+        ImGui.Spacing();
+        if (ImGui.Button("Forget everything"))
+            observations.ForgetEverything();
+
+        ImGui.SameLine();
+        ImGui.TextDisabled($"{entries.Count} place(s) farmed");
+        ImGui.Separator();
+
+        using var child = ImRaii.Child("##learned", new Vector2(-1, -1));
+        if (!child)
+            return;
+
+        using var table = ImRaii.Table("##learned-table", 5, ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp);
+        if (!table)
+            return;
+
+        ImGui.TableSetupColumn("mob");
+        ImGui.TableSetupColumn("zone");
+        ImGui.TableSetupColumn("kills");
+        ImGui.TableSetupColumn("comes back in");
+        ImGui.TableSetupColumn(string.Empty);
+        ImGui.TableHeadersRow();
+
+        foreach (var (mobId, territoryId, what) in entries)
+        {
+            using var id = ImRaii.PushId($"{mobId}-{territoryId}");
+
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(mobs.Get(mobId)?.Name ?? $"mob {mobId}");
+
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(mobs.ZoneName(territoryId));
+
+            ImGui.TableNextColumn();
+            ImGui.TextUnformatted(what.Kills.ToString());
+
+            ImGui.TableNextColumn();
+            if (what.TypicalRepopulation() is { } typical)
+                ImGui.TextUnformatted($"{typical.TotalSeconds:F0}s  ({what.Repopulated.Count} seen)");
+            else
+                ImGui.TextDisabled($"not yet ({what.Repopulated.Count}/3)");
+
+            ImGui.TableNextColumn();
+            if (ImGui.SmallButton("Forget"))
+                observations.Forget(mobId, territoryId);
+        }
     }
 
     private void DrawRun(MobIndex mobs, FarmSession session)
