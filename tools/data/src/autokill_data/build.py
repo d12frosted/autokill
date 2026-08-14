@@ -1,10 +1,16 @@
 """Join the upstream datasets into one index the plugin can ship.
 
-Two datasets carry the halves we need and neither is enough alone:
+Several datasets carry the pieces and none is enough alone:
 
   Garland Tools  which mobs drop which items, keyed by a composite mob id whose
                  low ten digits are the game's BNpcName id
-  Teamcraft      where mobs have actually been seen standing, keyed by BNpcName
+  Teamcraft      where mobs have actually been seen standing, keyed by BNpcName,
+                 plus its own item-to-mob drop table
+
+The two drop tables disagree about which half of the game they cover, so both
+are merged. Garland is strong on A Realm Reborn materials and thin on anything
+recent; Teamcraft carries drops Garland never recorded, Almasty Fur in Garlemald
+being the case that proved it. Neither alone is a fair picture.
 
 BNpcName is the join column. Everything else (territory, expansion, map
 projection) comes from the game's own sheets via the datamining CSVs.
@@ -75,6 +81,17 @@ class Mob:
         }
 
 
+def invert_drop_sources(sources: dict[str, Any]) -> dict[int, set[int]]:
+    """Turn Teamcraft's {item: [mob, ...]} into {mob: {item, ...}}."""
+    out: dict[int, set[int]] = {}
+    for item_id, mob_ids in sources.items():
+        if not isinstance(mob_ids, list):
+            continue
+        for mob_id in mob_ids:
+            out.setdefault(int(mob_id), set()).add(int(item_id))
+    return out
+
+
 def _territory_lookup(cache: Cache) -> dict[int, dict[str, Any]]:
     out: dict[int, dict[str, Any]] = {}
     for row in datamining_csv(cache, "TerritoryType"):
@@ -140,6 +157,10 @@ def build(cache: Cache, cluster_radius: float = DEFAULT_CLUSTER_RADIUS, progress
         )
         if mob.get("name"):
             proper_names.setdefault(ref.bnpc_name_id, mob["name"])
+
+    log("merging teamcraft drop sources")
+    for bnpc_name_id, item_ids in invert_drop_sources(teamcraft(cache, "drop-sources")).items():
+        drops_by_bnpc.setdefault(bnpc_name_id, set()).update(item_ids)
 
     log("building spots")
     mobs: dict[int, Mob] = {}
