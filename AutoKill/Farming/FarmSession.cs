@@ -145,7 +145,7 @@ public sealed class FarmSession
 
         // Anything already in the bags is not something this run produced.
         foreach (var itemId in mob.Drops)
-            baselineCounts[itemId] = CountOf(itemId);
+            baselineCounts[itemId] = Bags.CountOf(itemId);
 
         Phase = FarmPhase.Teleporting;
         Status = "starting";
@@ -196,7 +196,7 @@ public sealed class FarmSession
         kills,
         DateTime.UtcNow - startedAt,
         objects.LocalPlayer?.Level ?? 0,
-        InventoryFull(),
+        Bags.IsFull(),
         objects.LocalPlayer is { IsDead: true },
         gained);
 
@@ -1065,38 +1065,9 @@ public sealed class FarmSession
     {
         foreach (var (itemId, baseline) in baselineCounts)
         {
-            var delta = CountOf(itemId) - baseline;
+            var delta = Bags.CountOf(itemId) - baseline;
             if (delta > 0)
                 gained[itemId] = delta;
         }
-    }
-
-    private static unsafe int CountOf(uint itemId)
-    {
-        var manager = InventoryManager.Instance();
-        return manager == null ? 0 : manager->GetInventoryItemCount(itemId);
-    }
-
-    private static unsafe bool InventoryFull()
-    {
-        var manager = InventoryManager.Instance();
-        if (manager == null)
-            return false;
-
-        // The four ordinary bags. Anything else is not somewhere loot lands.
-        for (var type = InventoryType.Inventory1; type <= InventoryType.Inventory4; type++)
-        {
-            var container = manager->GetInventoryContainer(type);
-            if (container == null || !container->IsLoaded)
-                continue;
-
-            for (var slot = 0; slot < container->Size; slot++)
-            {
-                if (container->GetInventorySlot(slot)->ItemId == 0)
-                    return false;
-            }
-        }
-
-        return true;
     }
 }
