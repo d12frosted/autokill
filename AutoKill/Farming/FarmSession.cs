@@ -60,7 +60,7 @@ public sealed class FarmSession
     private readonly HashSet<ulong> engaged = [];
 
     private DateTime lastMove = DateTime.MinValue;
-    private DateTime lastMount = DateTime.MinValue;
+    private DateTime lastMountAction = DateTime.MinValue;
     private bool flagged;
     private DateTime lastTeleport = DateTime.MinValue;
     private Vector3? resolvedSpot;
@@ -243,9 +243,9 @@ public sealed class FarmSession
                 return;
             }
 
-            if (PlayerActions.CanMount(condition) && DateTime.UtcNow - lastMount >= MountCooldown)
+            if (PlayerActions.CanMount(condition) && DateTime.UtcNow - lastMountAction >= MountCooldown)
             {
-                lastMount = DateTime.UtcNow;
+                lastMountAction = DateTime.UtcNow;
                 if (navmesh.Moving)
                     navmesh.Stop();
                 Status = "mounting";
@@ -268,6 +268,28 @@ public sealed class FarmSession
         if (clientState.TerritoryType != location.TerritoryTypeId)
         {
             Phase = FarmPhase.Teleporting;
+            return;
+        }
+
+        // Nothing can be cast from the saddle, so the mount that made the
+        // journey quick has to go before anything can be killed.
+        if (PlayerActions.IsMounted(condition))
+        {
+            Status = "dismounting";
+            if (navmesh.Moving)
+                navmesh.Stop();
+            if (DateTime.UtcNow - lastMountAction >= MountCooldown)
+            {
+                lastMountAction = DateTime.UtcNow;
+                PlayerActions.Dismount();
+            }
+
+            return;
+        }
+
+        if (PlayerActions.IsMounting(condition))
+        {
+            Status = "dismounting";
             return;
         }
 

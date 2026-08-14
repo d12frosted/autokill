@@ -14,6 +14,10 @@ public static class PlayerActions
     // anyone without asking which mounts they own.
     private const uint MountRoulette = 9;
 
+    // GeneralAction row 23. Nothing can be cast from the saddle, so the mount
+    // that made travel quick has to go before a single blow can be struck.
+    private const uint DismountAction = 23;
+
     public static bool IsMounted(ICondition condition) =>
         condition[ConditionFlag.Mounted] || condition[ConditionFlag.RidingPillion];
 
@@ -43,6 +47,12 @@ public static class PlayerActions
     {
         var manager = ActionManager.Instance();
         return manager != null && manager->UseAction(ActionType.GeneralAction, MountRoulette);
+    }
+
+    public static unsafe bool Dismount()
+    {
+        var manager = ActionManager.Instance();
+        return manager != null && manager->UseAction(ActionType.GeneralAction, DismountAction);
     }
 
     /// <summary>
