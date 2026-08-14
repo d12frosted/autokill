@@ -22,6 +22,12 @@ drop it, with icons, zones and how thickly each place spawns. Mobs that drop som
 have nowhere recorded to find them are still listed, and say so, rather than silently
 missing.
 
+**Or start from a crafting list.** With Artisan installed, By drop offers your crafting
+lists. Pick one and it shows the materials a mob can supply, how many are in your bags
+and how many are still to find. Choosing one carries the amount through, so the goal is
+set as well as the target. Subcrafts are followed down, because a mob drop is never the
+item on the list, it is a hide two steps under it.
+
 **Farm an area, not a spot.** Mobs of one kind are spread over a field in several loose
 knots. AutoKill treats the whole field as one place, flies a circuit around it, and moves
 on when a knot is cleared instead of standing over a respawn timer.
@@ -45,11 +51,11 @@ one is a single click rather than setting it up again.
 
 `/autokill` opens the window. It shows one thing at a time:
 
-- **Browsing** — four tabs: By mob, By drop, History, Learned, plus Settings.
-- **Planning** — the area you chose, and what should end the run. Nothing starts until
+- **Browsing**: five tabs. By mob, By drop, History, Learned and Settings.
+- **Planning**: the area you chose, and what should end the run. Nothing starts until
   you press Start.
-- **Running** — where it is, what it is doing, and how far along. One Stop button.
-- **Finished** — what happened, until you dismiss it. Or farm the same area again.
+- **Running**: where it is, what it is doing, and how far along. One Stop button.
+- **Finished**: what happened, until you dismiss it. Or farm the same area again.
 
 ### Settings
 
@@ -73,6 +79,8 @@ what you want after a zone is reworked in a patch.
 - **A rotation plugin** for fighting. Wrath Combo is wired up. Without one the loop still
   travels and targets, and leaves the fighting to you.
 - An attuned aetheryte in the zone you want to farm.
+- **Artisan**, only if you want to farm against a crafting list. Its lists are read from
+  its config file, so it does not have to be loaded.
 
 If Wrath's auto-rotation is already running, AutoKill leaves it completely alone rather
 than reaching into your settings.
@@ -135,7 +143,8 @@ dotnet test AutoKill.Tests/AutoKill.Tests.csproj
 
 ### Releasing
 
-Bump `<Version>` in `AutoKill/AutoKill.csproj`, commit, then tag it:
+Add what changed to [CHANGELOG.md](CHANGELOG.md), bump `<Version>` in
+`AutoKill/AutoKill.csproj`, commit, then tag it:
 
 ```sh
 git tag v0.2.0 && git push origin v0.2.0
@@ -148,6 +157,10 @@ offers it as an update.
 `./scripts/package.sh` does the same locally if you would rather do it by hand. It
 refuses nothing, so mind that the manifest and the release have to agree: Dalamud checks
 the version in the manifest against the assembly it downloads.
+
+## What changed
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## Why things work the way they do
 
