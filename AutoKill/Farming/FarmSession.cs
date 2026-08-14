@@ -254,12 +254,18 @@ public sealed class FarmSession
             }
         }
 
-        Status = $"travelling to {location.ZoneName} ({remaining:F0}y)";
+        // Already in the air: fly the rest of the way rather than refusing to
+        // path, and let the descent to a ground level spot do the landing.
+        var flying = PlayerActions.IsFlying(condition);
+        Status = flying
+            ? $"flying to {location.ZoneName} ({remaining:F0}y)"
+            : $"travelling to {location.ZoneName} ({remaining:F0}y)";
+
         if (navmesh.Moving || navmesh.PathfindInProgress || DateTime.UtcNow - lastMove < MoveCooldown)
             return;
 
         lastMove = DateTime.UtcNow;
-        if (!navmesh.MoveCloseTo(spot, ArrivalRange / 2f))
+        if (!navmesh.MoveCloseTo(spot, ArrivalRange / 2f, flying))
             log.Warning("vnavmesh would not path to the farm spot.");
     }
 
@@ -268,6 +274,25 @@ public sealed class FarmSession
         if (clientState.TerritoryType != location.TerritoryTypeId)
         {
             Phase = FarmPhase.Teleporting;
+            return;
+        }
+
+        var spotForLanding = ResolveSpot();
+
+        // Dismounting in the air means falling out of the sky, possibly into
+        // somewhere with no path back. Fly down to the spot first and dismount
+        // once there is ground underfoot.
+        if (PlayerActions.IsFlying(condition))
+        {
+            Status = "landing";
+            if (!navmesh.Moving
+                && !navmesh.PathfindInProgress
+                && DateTime.UtcNow - lastMove >= MoveCooldown)
+            {
+                lastMove = DateTime.UtcNow;
+                navmesh.MoveCloseTo(spotForLanding, ArrivalRange / 2f, true);
+            }
+
             return;
         }
 

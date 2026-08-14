@@ -47,10 +47,11 @@ public sealed class NavmeshIpc(IDalamudPluginInterface plugin)
 
     public bool Moving => Try(() => isRunning.InvokeFunc(), false);
 
-    public bool MoveTo(Vector3 destination) => Try(() => moveTo.InvokeFunc(destination, false), false);
+    public bool MoveTo(Vector3 destination, bool fly = false) =>
+        Try(() => moveTo.InvokeFunc(destination, fly), false);
 
-    public bool MoveCloseTo(Vector3 destination, float range) =>
-        Try(() => moveCloseTo.InvokeFunc(destination, false, range), false);
+    public bool MoveCloseTo(Vector3 destination, float range, bool fly = false) =>
+        Try(() => moveCloseTo.InvokeFunc(destination, fly, range), false);
 
     public void Stop() => Try<object?>(() => { stop.InvokeAction(); return null; }, null);
 

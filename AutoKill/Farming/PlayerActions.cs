@@ -21,6 +21,12 @@ public static class PlayerActions
     public static bool IsMounted(ICondition condition) =>
         condition[ConditionFlag.Mounted] || condition[ConditionFlag.RidingPillion];
 
+    /// <summary>
+    /// In the air on a flying mount. Ground paths cannot be followed from up
+    /// here, and dismounting means falling out of the sky.
+    /// </summary>
+    public static bool IsFlying(ICondition condition) => condition[ConditionFlag.InFlight];
+
     /// <summary>True while the mount is being summoned, so nothing should move.</summary>
     public static bool IsMounting(ICondition condition) =>
         condition[ConditionFlag.Mounting]
