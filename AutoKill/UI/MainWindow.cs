@@ -3,8 +3,10 @@ using AutoKill.Core;
 using AutoKill.Data;
 using AutoKill.Farming;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface.Textures;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
+using Dalamud.Plugin.Services;
 
 namespace AutoKill.UI;
 
@@ -17,6 +19,7 @@ public sealed class MainWindow : Window
 {
     private readonly Func<MobIndex?> index;
     private readonly FarmController farming;
+    private readonly ITextureProvider textures;
 
     private string mobQuery = string.Empty;
     private string itemQuery = string.Empty;
@@ -31,11 +34,12 @@ public sealed class MainWindow : Window
     private int minuteTarget;
     private bool requireAll;
 
-    public MainWindow(Func<MobIndex?> index, FarmController farming)
+    public MainWindow(Func<MobIndex?> index, FarmController farming, ITextureProvider textures)
         : base("AutoKill###AutoKillMain")
     {
         this.index = index;
         this.farming = farming;
+        this.textures = textures;
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(520, 400),
@@ -68,6 +72,25 @@ public sealed class MainWindow : Window
         DrawDropTab(mobs);
     }
 
+    /// <summary>
+    /// Draw an item's icon inline, leaving the cursor where the text should go.
+    /// Falls through silently when there is no icon, since a missing picture is
+    /// not worth a gap in the row.
+    /// </summary>
+    private void DrawItemIcon(MobIndex mobs, uint itemId)
+    {
+        var icon = mobs.ItemIcon(itemId);
+        if (icon == 0)
+            return;
+
+        if (textures.GetFromGameIcon(new GameIconLookup(icon)).GetWrapOrDefault() is not { } texture)
+            return;
+
+        var size = ImGui.GetTextLineHeight() * 1.4f;
+        ImGui.Image(texture.Handle, new Vector2(size, size));
+        ImGui.SameLine();
+    }
+
     private void DrawSession(MobIndex mobs)
     {
         if (farming.Current is not { } session)
@@ -98,6 +121,7 @@ public sealed class MainWindow : Window
         foreach (var itemId in itemTargets.Keys.Concat(progress.ItemsGained.Keys).Distinct())
         {
             var have = progress.CountOf(itemId);
+            DrawItemIcon(mobs, itemId);
             ImGui.TextDisabled(itemTargets.TryGetValue(itemId, out var target)
                 ? $"{mobs.ItemName(itemId)} {have}/{target}"
                 : $"{mobs.ItemName(itemId)} x{have}");
@@ -134,6 +158,7 @@ public sealed class MainWindow : Window
             {
                 using var id = ImRaii.PushId((int)itemId);
 
+                DrawItemIcon(mobs, itemId);
                 var wanted = itemGoals.ContainsKey(itemId);
                 if (ImGui.Checkbox($"{mobs.ItemName(itemId)}##want", ref wanted))
                 {
@@ -256,6 +281,7 @@ public sealed class MainWindow : Window
         {
             foreach (var (itemId, name) in mobs.SearchItems(itemQuery))
             {
+                DrawItemIcon(mobs, itemId);
                 if (!ImGui.Selectable($"{name}##item{itemId}"))
                     continue;
                 selectedItem = itemId;
@@ -272,6 +298,7 @@ public sealed class MainWindow : Window
         }
 
         ImGui.SameLine();
+        DrawItemIcon(mobs, selectedItem);
         ImGui.TextUnformatted(selectedItemName);
         ImGui.Separator();
 

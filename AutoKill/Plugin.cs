@@ -25,6 +25,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ITargetManager Targets { get; private set; } = null!;
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static IToastGui Toast { get; private set; } = null!;
+    [PluginService] internal static ITextureProvider Textures { get; private set; } = null!;
 
     private readonly WindowSystem windows = new("AutoKill");
     private readonly MainWindow mainWindow;
@@ -42,7 +43,7 @@ public sealed class Plugin : IDalamudPlugin
             Framework, navmesh, wrath, ClientState, Objects, Targets, DataManager, Condition, notifier,
             itemId => index?.ItemName(itemId) ?? $"item {itemId}", Log);
 
-        mainWindow = new MainWindow(() => index, farming);
+        mainWindow = new MainWindow(() => index, farming, Textures);
         windows.AddWindow(mainWindow);
 
         PluginInterface.UiBuilder.Draw += windows.Draw;

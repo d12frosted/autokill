@@ -74,15 +74,18 @@ public sealed class MobIndex
     private readonly Dictionary<uint, MobEntry> byNameId;
     private readonly Dictionary<uint, List<uint>> mobsByItem;
     private readonly Dictionary<uint, string> droppableItemNames;
+    private readonly Dictionary<uint, ushort> droppableItemIcons;
 
     private MobIndex(
         Dictionary<uint, MobEntry> byNameId,
         Dictionary<uint, List<uint>> mobsByItem,
-        Dictionary<uint, string> droppableItemNames)
+        Dictionary<uint, string> droppableItemNames,
+        Dictionary<uint, ushort> droppableItemIcons)
     {
         this.byNameId = byNameId;
         this.mobsByItem = mobsByItem;
         this.droppableItemNames = droppableItemNames;
+        this.droppableItemIcons = droppableItemIcons;
     }
 
     public IReadOnlyCollection<MobEntry> Mobs => byNameId.Values;
@@ -190,6 +193,7 @@ public sealed class MobIndex
         var dropsByMob = new Dictionary<uint, HashSet<uint>>();
         var mobsByItem = new Dictionary<uint, List<uint>>();
         var droppableItemNames = new Dictionary<uint, string>();
+        var droppableItemIcons = new Dictionary<uint, ushort>();
 
         foreach (var drop in drops)
         {
@@ -209,6 +213,7 @@ public sealed class MobIndex
                 && items.TryGetRow(drop.ItemId, out var item))
             {
                 droppableItemNames[drop.ItemId] = item.Name.ExtractText();
+                droppableItemIcons[drop.ItemId] = item.Icon;
             }
         }
 
@@ -270,7 +275,7 @@ public sealed class MobIndex
             + $"{byNameId.Values.Count(m => m.Farmable)} farmable, "
             + $"{droppableItemNames.Count} droppable items.");
 
-        return new MobIndex(byNameId, mobsByItem, droppableItemNames);
+        return new MobIndex(byNameId, mobsByItem, droppableItemNames, droppableItemIcons);
     }
 
     /// <summary>
@@ -311,6 +316,9 @@ public sealed class MobIndex
     /// <summary>The name of a droppable item, for picking one out of a list.</summary>
     public string ItemName(uint itemId) =>
         droppableItemNames.TryGetValue(itemId, out var name) ? name : $"item {itemId}";
+
+    /// <summary>The item's icon id, or zero when there is nothing to draw.</summary>
+    public ushort ItemIcon(uint itemId) => droppableItemIcons.GetValueOrDefault(itemId);
 
     /// <summary>Mobs whose name contains the query, the ones you can actually reach first.</summary>
     public IReadOnlyList<MobEntry> SearchMobs(string query, int limit = 50)
