@@ -32,6 +32,7 @@ public sealed class MainWindow : Window
     private readonly Observations observations;
     private readonly RunHistory history;
     private readonly ArtisanLists artisan;
+    private readonly HuntBills hunts;
     private readonly Action saveConfig;
 
     private string mobQuery = string.Empty;
@@ -60,6 +61,7 @@ public sealed class MainWindow : Window
         Observations observations,
         RunHistory history,
         ArtisanLists artisan,
+        HuntBills hunts,
         Action saveConfig)
         : base("AutoKill###AutoKillMain")
     {
@@ -70,6 +72,7 @@ public sealed class MainWindow : Window
         this.observations = observations;
         this.history = history;
         this.artisan = artisan;
+        this.hunts = hunts;
         this.saveConfig = saveConfig;
         SizeConstraints = new WindowSizeConstraints
         {
@@ -122,9 +125,112 @@ public sealed class MainWindow : Window
 
         DrawMobTab(mobs);
         DrawDropTab(mobs);
+        DrawHuntTab(mobs);
         DrawHistoryTab(mobs);
         DrawLearnedTab(mobs);
         DrawSettingsTab();
+    }
+
+    /// <summary>
+    /// The hunt bills in hand, and what is left on each.
+    /// </summary>
+    /// <remarks>
+    /// A bill already is what this window asks for: a mob, a zone and a number.
+    /// The counts are the game's own, so they are right about kills from before
+    /// the plugin was opened, and the goal offered is what is left rather than
+    /// the whole bill.
+    /// </remarks>
+    private void DrawHuntTab(MobIndex mobs)
+    {
+        using var tab = ImRaii.TabItem("Hunts");
+        if (!tab)
+            return;
+
+        var bills = hunts.Obtained();
+        if (bills.Count == 0)
+        {
+            ImGui.Spacing();
+            ImGui.TextDisabled("No hunt bills in hand.");
+            ImGui.TextDisabled("Pick some up from a hunt board and they turn up here.");
+            return;
+        }
+
+        using var child = ImRaii.Child("##hunts", new Vector2(-1, -1));
+        if (!child)
+            return;
+
+        foreach (var bill in bills)
+        {
+            ImGui.TextUnformatted(bill.Name);
+            using var indent = ImRaii.PushIndent();
+
+            foreach (var target in bill.Targets)
+            {
+                using var id = ImRaii.PushId($"{bill.Name}-{target.BNpcNameId}");
+                DrawHuntTarget(mobs, target);
+            }
+
+            ImGui.Separator();
+        }
+    }
+
+    private void DrawHuntTarget(MobIndex mobs, HuntTarget target)
+    {
+        var where = string.IsNullOrEmpty(target.Where) ? target.Zone : $"{target.Where}, {target.Zone}";
+
+        if (target.Done)
+        {
+            ImGui.TextDisabled($"{target.Name}  {target.Needed}/{target.Needed}  done");
+            return;
+        }
+
+        ImGui.TextUnformatted(target.Name);
+        ImGui.SameLine();
+        ImGui.TextDisabled($"{target.Killed}/{target.Needed}   {where}");
+
+        using var indent = ImRaii.PushIndent();
+
+        // Only the zone the bill names. A mob of the same name elsewhere counts
+        // for nothing, and sending someone there would be worse than useless.
+        var areas = mobs.Get(target.BNpcNameId)?.Areas
+            .Where(area => area.TerritoryTypeId == target.TerritoryTypeId)
+            .ToList() ?? [];
+
+        if (areas.Count == 0)
+        {
+            ImGui.TextDisabled("nowhere recorded in that zone");
+            return;
+        }
+
+        foreach (var area in areas.Take(2))
+        {
+            using var areaId = ImRaii.PushId($"{area.Centre.X:F0}-{area.Centre.Z:F0}");
+
+            if (ImGui.SmallButton("Choose"))
+                PlanHunt(mobs, target, area);
+
+            ImGui.SameLine();
+            ImGui.TextDisabled(
+                $"({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})  {area.SpawnCount} spawns"
+                + (area.Spots.Count > 1 ? $" over {area.Spots.Count} spots" : string.Empty));
+        }
+
+        if (areas.Count > 2)
+            ImGui.TextDisabled($"... and {areas.Count - 2} more in that zone");
+    }
+
+    private void PlanHunt(MobIndex mobs, HuntTarget target, FarmArea area)
+    {
+        if (mobs.Get(target.BNpcNameId) is not { } mob)
+            return;
+
+        // What is left, not what the bill asked for, and nothing else. A bill is
+        // finished by killing, so a time limit or a drop would only get in the way.
+        killTarget = target.Remaining;
+        minuteTarget = 0;
+        requireAll = false;
+
+        Plan(mob, area, carryItem: false);
     }
 
     /// <summary>
@@ -540,7 +646,7 @@ public sealed class MainWindow : Window
         ImGui.SameLine();
     }
 
-    private void Plan(MobEntry mob, FarmArea area)
+    private void Plan(MobEntry mob, FarmArea area, bool carryItem = true)
     {
         plannedMob = mob;
         plannedArea = area;
@@ -549,7 +655,7 @@ public sealed class MainWindow : Window
         // Arriving from an item search means the item is already known, so do
         // not make it be picked out of the list a second time. How much is
         // wanted comes with it, which is the whole use of a crafting list.
-        if (selectedItem != 0 && mob.Drops.Contains(selectedItem))
+        if (carryItem && selectedItem != 0 && mob.Drops.Contains(selectedItem))
             itemGoals[selectedItem] = Math.Max(1, selectedItemWanted);
     }
 

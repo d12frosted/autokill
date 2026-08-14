@@ -53,6 +53,8 @@ public sealed class Plugin : IDalamudPlugin
         var artisan = new ArtisanLists(
             Path.Combine(PluginInterface.ConfigFile.Directory!.FullName, "Artisan.json"), DataManager, Log);
 
+        var hunts = new HuntBills(DataManager, Log);
+
         var navmesh = new NavmeshIpc(PluginInterface, Log);
         notifier = new Notifier(ChatGui, Toast) { Enabled = config.Notifications };
         wrath = new WrathIpc(PluginInterface, Log);
@@ -62,7 +64,7 @@ public sealed class Plugin : IDalamudPlugin
             itemId => index?.ItemName(itemId) ?? $"item {itemId}", config, NewRecorder, observations, history, Log);
 
         mainWindow = new MainWindow(
-            () => index, farming, Textures, config, observations, history, artisan, Save);
+            () => index, farming, Textures, config, observations, history, artisan, hunts, Save);
         windows.AddWindow(mainWindow);
 
         PluginInterface.UiBuilder.Draw += windows.Draw;
