@@ -21,6 +21,9 @@
     - The sights run from radius 127 to 170, between the mark at 119 and the
       route at 179.5, so nothing touches anything. They are longer than they are
       wide, or they read as floating squares rather than as sights.
+    - The mark is centred in the field above the status bar, not in the square,
+      which puts it at y 233 rather than 256. Centred in the square its lowest
+      dot runs into the bar, and it sits low in the white besides.
 
     Butt caps throughout. Round caps are what make the neighbouring icons look
     soft, and softness is the opposite of the point here.
@@ -32,6 +35,9 @@
 
     <!-- status bar, as on the cards this borrows from -->
     <rect x="20" y="446" width="472" height="46" fill="#5F87AF"/>
+
+    <!-- Everything below is the mark, hung above the bar rather than in the square. -->
+    <g transform="translate(0 -23)">
 
     <!--
       The route. Circumference 2 * pi * 186 = 1168.672, thirty seconds of which
@@ -59,5 +65,7 @@
 
     <!-- what the sights are on -->
     <circle cx="256" cy="256" r="36" fill="#D66853"/>
+
+    </g>
   </g>
 </svg>
