@@ -1,3 +1,4 @@
+using AutoKill.Farming;
 using Dalamud.Configuration;
 
 namespace AutoKill;
@@ -29,4 +30,10 @@ public sealed class Configuration : IPluginConfiguration
     /// time actually went.
     /// </summary>
     public bool RecordRuns { get; set; }
+
+    /// <summary>Keep the chocobo companion out while farming.</summary>
+    public bool SummonCompanion { get; set; }
+
+    /// <summary>How the chocobo should behave once it is out.</summary>
+    public ChocoboStance CompanionStance { get; set; } = ChocoboStance.Attacker;
 }

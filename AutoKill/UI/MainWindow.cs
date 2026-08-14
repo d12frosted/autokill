@@ -467,6 +467,30 @@ public sealed class MainWindow : Window
             saveConfig();
         }
 
+        var companion = config.SummonCompanion;
+        if (ImGui.Checkbox("keep the chocobo out", ref companion))
+        {
+            config.SummonCompanion = companion;
+            saveConfig();
+        }
+
+        if (companion)
+        {
+            using var indent = ImRaii.PushIndent();
+
+            var stance = (int)config.CompanionStance;
+            ImGui.SetNextItemWidth(160);
+            if (ImGui.Combo("stance", ref stance, "Free\0Defender\0Attacker\0Healer\0"))
+            {
+                config.CompanionStance = (ChocoboStance)(stance + (int)ChocoboStance.Free);
+                saveConfig();
+            }
+
+            ImGui.TextDisabled(Companion.HasGreens()
+                ? $"out for another {Companion.TimeLeft / 60f:F0} min"
+                : "no Gysahl Greens, so it cannot be called");
+        }
+
         ImGui.Spacing();
         ImGui.Separator();
 

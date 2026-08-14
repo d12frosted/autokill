@@ -58,6 +58,7 @@ public sealed class FarmSession
     private static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan SightingInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan StuckAfter = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan CompanionInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan JumpCooldown = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan TeleportCooldown = TimeSpan.FromSeconds(10);
 
@@ -97,6 +98,8 @@ public sealed class FarmSession
     private Vector3 lastPosition;
     private DateTime? stuckSince;
     private bool stuckReported;
+    private DateTime lastCompanionCheck = DateTime.MinValue;
+    private bool companionWarned;
     private DateTime lastSample = DateTime.MinValue;
     private DateTime lastSighting = DateTime.MinValue;
     private readonly Dictionary<int, DateTime> clearedAt = [];
@@ -740,6 +743,8 @@ public sealed class FarmSession
             return;
         }
 
+        KeepCompanion();
+
         if (!wrath.Rotating && !wrath.Start())
             Status = "no rotation backend, fighting is up to you";
 
@@ -854,6 +859,46 @@ public sealed class FarmSession
 
         if (!accepted)
             log.Warning("vnavmesh would not path there.");
+    }
+
+    /// <summary>
+    /// Keep the chocobo out, if it is wanted.
+    /// </summary>
+    /// <remarks>
+    /// Called from the hunt rather than once at the start, because the timer
+    /// runs down over a long grind and the summon is refused in combat, so
+    /// there is no single moment that works. Checked rarely: it is two reads and
+    /// nothing to do almost every time.
+    /// </remarks>
+    private void KeepCompanion()
+    {
+        if (!config.SummonCompanion || DateTime.UtcNow - lastCompanionCheck < CompanionInterval)
+            return;
+
+        lastCompanionCheck = DateTime.UtcNow;
+
+        // Well before it expires, since summoning needs a gap in the fighting.
+        if (Companion.TimeLeft < 300f)
+        {
+            if (!Companion.HasGreens())
+            {
+                if (!companionWarned)
+                {
+                    companionWarned = true;
+                    notifier.Info("out of Gysahl Greens, so the chocobo stays home.");
+                }
+
+                return;
+            }
+
+            if (Companion.Summon(condition))
+                recorder?.Write("companion", new { what = "summoned" });
+
+            return;
+        }
+
+        if (Companion.SetStance(config.CompanionStance))
+            recorder?.Write("companion", new { what = "stance", to = config.CompanionStance.ToString() });
     }
 
     /// <summary>How many of the quarry are in sight, for saying so.</summary>
