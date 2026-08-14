@@ -133,9 +133,21 @@ explicitly.
 dotnet test AutoKill.Tests/AutoKill.Tests.csproj
 ```
 
-To cut a release, `./scripts/package.sh` builds the plugin, writes `dist/AutoKill.zip`
-and regenerates `repo.json`. Attach the zip to a release tagged `v<version>` and commit
-the manifest; the two have to match or Dalamud refuses the download.
+### Releasing
+
+Bump `<Version>` in `AutoKill/AutoKill.csproj`, commit, then tag it:
+
+```sh
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+CI builds, tests, publishes the release with the zip attached, and commits the updated
+`repo.json`. Dalamud picks the new version up from the manifest on its next check and
+offers it as an update.
+
+`./scripts/package.sh` does the same locally if you would rather do it by hand. It
+refuses nothing, so mind that the manifest and the release have to agree: Dalamud checks
+the version in the manifest against the assembly it downloads.
 
 ## Why things work the way they do
 

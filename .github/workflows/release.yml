@@ -1,0 +1,77 @@
+name: release
+
+# Publishing is three things that have to agree: a build, a release holding that
+# build, and a manifest saying where it is and what version it claims to be.
+# Dalamud refuses an update whose manifest and assembly disagree, and a manifest
+# committed without its release points at a download that does not exist. Doing
+# it by hand means remembering all three in order, so a tag does it instead.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # No game here, so the plugin builds against the same assemblies Dalamud
+      # ships to players.
+      - name: Fetch Dalamud
+        run: |
+          curl -sSL https://goatcorp.github.io/dalamud-distrib/latest.zip -o dalamud.zip
+          unzip -q dalamud.zip -d "$HOME/dalamud"
+          echo "DALAMUD_HOME=$HOME/dalamud" >> "$GITHUB_ENV"
+
+      # The project file is the one place a version is written. A tag that
+      # disagrees with it would produce a release Dalamud then refuses, so it is
+      # worth failing here instead.
+      - name: Check the tag matches the project
+        run: |
+          version="$(sed -n 's|.*<Version>\(.*\)</Version>.*|\1|p' AutoKill/AutoKill.csproj | head -1)"
+          if [ "v$version" != "${GITHUB_REF_NAME}" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match <Version>$version</Version>" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_ENV"
+
+      - name: Test
+        run: dotnet test AutoKill.Tests/AutoKill.Tests.csproj --nologo
+
+      - name: Package
+        run: ./scripts/package.sh
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/AutoKill.zip \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes
+
+      # Last, and only once the download it points at exists. Anyone whose
+      # Dalamud checks in between sees the previous version rather than a
+      # manifest promising something not yet uploaded.
+      - name: Update the repository manifest
+        run: |
+          if git diff --quiet repo.json; then
+            echo "manifest unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add repo.json
+          git commit -m "chore: point the manifest at ${GITHUB_REF_NAME}"
+          git push origin main
