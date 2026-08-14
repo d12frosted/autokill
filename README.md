@@ -1,6 +1,6 @@
-<img src="assets/icon.svg" alt="" width="128" align="right">
-
 # AutoKill
+
+<img src="assets/icon.svg" alt="" width="120" align="right">
 
 Pick a mob, or pick something you want it to drop, and AutoKill goes and farms it. It
 works out where the mob lives, teleports to the zone, mounts, flies over, kills its way
