@@ -41,15 +41,10 @@ public sealed class FarmSession
     // How far a fight may wander from the spot before it stops counting.
     private const float LeashRadius = 45f;
 
-    // Below this a mount costs more time to summon than it saves.
-    private const float MountDistance = 60f;
-
     private static readonly TimeSpan MoveCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MountCooldown = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan JumpCooldown = TimeSpan.FromMilliseconds(400);
     private static readonly TimeSpan TeleportCooldown = TimeSpan.FromSeconds(10);
-
-    // How long an emptied spot is given before moving on round the circuit.
-    private static readonly TimeSpan RespawnPatience = TimeSpan.FromSeconds(6);
 
     private readonly MobEntry mob;
     private readonly FarmArea area;
@@ -63,6 +58,7 @@ public sealed class FarmSession
     private readonly ICondition condition;
     private readonly Notifier notifier;
     private readonly Func<uint, string> itemName;
+    private readonly Configuration config;
     private readonly IPluginLog log;
 
     private readonly DateTime startedAt = DateTime.UtcNow;
@@ -72,6 +68,7 @@ public sealed class FarmSession
 
     private DateTime lastMove = DateTime.MinValue;
     private DateTime lastMountAction = DateTime.MinValue;
+    private DateTime lastJump = DateTime.MinValue;
     private bool flagged;
     private DateTime lastTeleport = DateTime.MinValue;
     private Vector3? resolvedSpot;
@@ -92,6 +89,7 @@ public sealed class FarmSession
         ICondition condition,
         Notifier notifier,
         Func<uint, string> itemName,
+        Configuration config,
         IPluginLog log)
     {
         this.mob = mob;
@@ -106,6 +104,7 @@ public sealed class FarmSession
         this.condition = condition;
         this.notifier = notifier;
         this.itemName = itemName;
+        this.config = config;
         this.log = log;
 
         // Anything already in the bags is not something this run produced.
@@ -266,7 +265,7 @@ public sealed class FarmSession
 
         // Mounting is worth a couple of seconds over any real distance, but
         // summoning is interrupted by movement, so stop first and wait it out.
-        if (remaining > MountDistance && !PlayerActions.IsMounted(condition))
+        if (remaining > config.MountDistance && !PlayerActions.IsMounted(condition))
         {
             if (PlayerActions.IsMounting(condition))
             {
@@ -286,13 +285,26 @@ public sealed class FarmSession
         }
 
         // Fly when the zone allows it, which is how anyone actually covers this
-        // sort of distance. Getting off the ground is vnavmesh's job: it jumps
-        // by itself once the path climbs and the character is mounted, so all
-        // that is needed here is asking for a path through the air.
-        var flying = PlayerActions.IsFlying(condition)
-                     || (remaining > MountDistance
-                         && PlayerActions.IsMounted(condition)
-                         && PlayerActions.CanFlyIn(data, area.TerritoryTypeId));
+        // sort of distance.
+        var flying = PlayerActions.IsFlying(condition);
+        if (!flying
+            && remaining > config.MountDistance
+            && PlayerActions.IsMounted(condition)
+            && PlayerActions.CanFlyIn(data, area.TerritoryTypeId))
+        {
+            // Take off deliberately rather than leaving it to the path. vnavmesh
+            // only jumps once a path climbs, and a path between two points on
+            // the ground has no reason to, so waiting for that means running the
+            // whole way with a flying mount underneath.
+            Status = "taking off";
+            if (DateTime.UtcNow - lastJump >= JumpCooldown)
+            {
+                lastJump = DateTime.UtcNow;
+                PlayerActions.Jump();
+            }
+
+            return;
+        }
 
         // Walking through something we came here to kill and then walking back
         // to it is daft. Flying past is left alone: landing early costs more
@@ -393,7 +405,7 @@ public sealed class FarmSession
             // Cleared. Standing about waiting for a respawn timer wastes the
             // rest of the area, so move on round the circuit instead; by the
             // time it comes back here this knot has repopulated.
-            if (DateTime.UtcNow - emptySince >= RespawnPatience)
+            if (DateTime.UtcNow - emptySince >= TimeSpan.FromSeconds(config.RespawnPatienceSeconds))
             {
                 // Diverting to something on the way leaves the spot unreached,
                 // and the circuit should not skip it just because the detour

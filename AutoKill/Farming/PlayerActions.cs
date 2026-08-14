@@ -19,6 +19,9 @@ public static class PlayerActions
     // that made travel quick has to go before a single blow can be struck.
     private const uint DismountAction = 23;
 
+    // GeneralAction row 2. On a flying mount this is what leaves the ground.
+    private const uint JumpAction = 2;
+
     public static bool IsMounted(ICondition condition) =>
         condition[ConditionFlag.Mounted] || condition[ConditionFlag.RidingPillion];
 
@@ -54,6 +57,15 @@ public static class PlayerActions
     {
         var manager = ActionManager.Instance();
         return manager != null && manager->UseAction(ActionType.GeneralAction, MountRoulette);
+    }
+
+    /// <summary>
+    /// Jump, which on a mount in a zone that allows it is how flight starts.
+    /// </summary>
+    public static unsafe bool Jump()
+    {
+        var manager = ActionManager.Instance();
+        return manager != null && manager->UseAction(ActionType.GeneralAction, JumpAction);
     }
 
     public static unsafe bool Dismount()
