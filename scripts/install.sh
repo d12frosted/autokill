@@ -100,6 +100,11 @@ LIST_TYPE = (
     " System.Private.CoreLib"
 )
 ENTRY_TYPE = "Dalamud.Configuration.DevPluginLocationSettings, Dalamud"
+SETTINGS_TYPE = (
+    "System.Collections.Generic.Dictionary`2[[System.String, System.Private.CoreLib],"
+    "[Dalamud.Configuration.Internal.DevPluginSettings, Dalamud]], System.Private.CoreLib"
+)
+ENTRY_SETTINGS_TYPE = "Dalamud.Configuration.Internal.DevPluginSettings, Dalamud"
 
 config = json.loads(config_path.read_text())
 node = config.get("DevPluginLoadLocations")
@@ -135,6 +140,20 @@ def save():
     config_path.write_text(json.dumps(config, indent=2))
 
 
+def registered_and_enabled():
+    return config.get("DevMode") and any(
+        is_target(entry) and entry.get("IsEnabled", True) for entry in values
+    )
+
+
+# Copying a new assembly over a plugin that is already registered needs no
+# configuration change at all, and dalamud picks it up on its own when automatic
+# reloading is on. That is the difference between an install that can happen
+# mid-session and one that has to wait for the game to close.
+if action == "needs-change":
+    print("no" if registered_and_enabled() else "yes")
+    sys.exit(0)
+
 if action == "status":
     dev_mode = "" if config.get("DevMode") else ", but DevMode is off so it will be skipped"
     for entry in values:
@@ -153,6 +172,22 @@ if action == "add":
     notes = []
     if stale:
         notes.append(f"cleared {len(stale)} stale")
+
+    # Start with the plugin loading on boot and reloading when the assembly
+    # changes, so installing over a running game is enough. Existing settings
+    # are left alone; they are the user's choice, not ours.
+    settings = config.setdefault(
+        "DevPluginSettings",
+        {"$type": SETTINGS_TYPE, },
+    )
+    if isinstance(settings, dict) and target not in settings:
+        settings[target] = {
+            "$type": ENTRY_SETTINGS_TYPE,
+            "StartOnBoot": True,
+            "NotifyForErrors": True,
+            "AutomaticReloading": True,
+        }
+        notes.append("enabled automatic reloading")
     # Dev plugin locations are only scanned when DevMode is on, so registering
     # without it produces a correct entry that is silently never looked at.
     if not config.get("DevMode"):
@@ -217,7 +252,12 @@ do_status() {
 }
 
 do_install() {
-    assert_game_stopped
+    # Copying over an already registered plugin touches no configuration, and
+    # dalamud reloads it by itself. Only a registration change has to wait for
+    # the game to close, because dalamud rewrites the config on exit.
+    local needs_change
+    needs_change="$(config_tool needs-change)"
+    [ "$needs_change" = "no" ] || assert_game_stopped
 
     if [ "$BUILD" -eq 1 ]; then
         info "building $CONFIG..."
@@ -243,6 +283,14 @@ do_install() {
         find "$BUILD_DIR" -maxdepth 1 -type f -exec cp {} "$INSTALL_DIR/" \;
     fi
 
+    if [ "$needs_change" = "no" ]; then
+        info "dev plugin: already registered, left the config alone"
+        info ""
+        info "done. dalamud reloads the plugin on its own if automatic reloading is on,"
+        info "otherwise hit reload in the dev plugins tab."
+        return
+    fi
+
     backup_once
 
     if [ "$DRY" -eq 1 ]; then
@@ -254,7 +302,7 @@ do_install() {
     info ""
     info "done. start the game and run /autokill."
     info "settings will land in: $PLUGIN_CONFIG_DIR"
-    info "note: after a rebuild, run this again to copy the new build across."
+    info "note: once registered, installing again works with the game running."
 }
 
 do_uninstall() {
