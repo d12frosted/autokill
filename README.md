@@ -8,8 +8,18 @@ Movement is vnavmesh, travel is Lifestream plus the aetheryte teleport, and the 
 is delegated to whichever rotation backend you already use (Wrath Combo, Rotation Solver
 Reborn or BossMod Reborn).
 
-This is early. Right now the repo contains a plugin scaffold and the data pipeline that
-everything else depends on.
+This is early. Right now `/autokill` opens a window that answers the lookup half of the
+problem: search a mob by name, or search for an item and see which mobs drop it, where
+they stand and how thickly they spawn there. Nothing moves your character yet.
+
+## Layout
+
+| project | what it is |
+|---|---|
+| `AutoKill` | the Dalamud plugin: data loading, UI, and eventually the IPC and farming loop |
+| `AutoKill.Core` | logic that needs no game client, so it can be tested on any platform |
+| `AutoKill.Tests` | tests for `AutoKill.Core` |
+| `tools/data` | a standalone extractor, kept as a supplement to the shipped dataset |
 
 ## Automation risk
 
