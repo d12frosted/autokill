@@ -78,7 +78,7 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         farming.Dispose();
-        wrath.Dispose();
+        wrath.Stop();
         CommandManager.RemoveHandler(CommandName);
         PluginInterface.UiBuilder.Draw -= windows.Draw;
         PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;

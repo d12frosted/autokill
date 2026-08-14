@@ -392,7 +392,7 @@ public sealed class FarmSession
             return;
         }
 
-        if (!wrath.Leased && !wrath.Start())
+        if (!wrath.Rotating && !wrath.Start())
             Status = "no rotation backend, fighting is up to you";
 
         var spot = ResolveSpot();
