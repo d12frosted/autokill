@@ -11,10 +11,18 @@ using Dalamud.Plugin.Services;
 namespace AutoKill.UI;
 
 /// <summary>
-/// Search, then plan, then run. Choosing a spot stages a plan rather than
-/// starting one: a run that begins before its goal is set is a run whose goal
-/// arrives too late to mean anything.
+/// One window, four states, and only ever one of them on screen.
 /// </summary>
+/// <remarks>
+/// Browsing, planning and running are separate jobs sharing no controls.
+/// Showing them together invites searching during a run and setting goals for a
+/// mob already left behind, so the window becomes whichever one is in hand:
+///
+///   browse  search by mob or by drop, or change settings
+///   plan    the chosen area, and what would end the run
+///   run     what is happening and how far along it is
+///   done    what happened, until dismissed
+/// </remarks>
 public sealed class MainWindow : Window
 {
     private readonly Func<MobIndex?> index;
@@ -35,6 +43,7 @@ public sealed class MainWindow : Window
     private int killTarget;
     private int minuteTarget;
     private bool requireAll;
+    private bool resultDismissed;
 
     public MainWindow(
         Func<MobIndex?> index,
@@ -66,113 +75,101 @@ public sealed class MainWindow : Window
         }
 
         if (farming.Blocker is { } blocker)
+        {
             ImGui.TextColored(new Vector4(1f, 0.6f, 0.3f, 1f), blocker);
+            ImGui.Separator();
+        }
 
-        if (farming.Running)
-            DrawSession(mobs);
-        else if (plannedMob is not null && plannedArea is not null)
+        var session = farming.Current;
+        if (session is not null && !(session.Phase == FarmPhase.Finished && resultDismissed))
+        {
+            // The title carries the state too, since the window is often behind
+            // something else while a run is going.
+            WindowName = $"AutoKill - {session.Mob.Name}###AutoKillMain";
+            DrawRun(mobs, session);
+            return;
+        }
+
+        WindowName = "AutoKill###AutoKillMain";
+
+        if (plannedMob is not null && plannedArea is not null)
+        {
             DrawPlan(mobs, plannedMob, plannedArea);
+            return;
+        }
 
-        DrawSettings();
+        DrawBrowse(mobs);
+    }
 
+    private void DrawBrowse(MobIndex mobs)
+    {
         using var tabs = ImRaii.TabBar("##autokill-tabs");
         if (!tabs)
             return;
 
         DrawMobTab(mobs);
         DrawDropTab(mobs);
+        DrawSettingsTab();
     }
 
-    private void DrawSettings()
+    private void DrawRun(MobIndex mobs, FarmSession session)
     {
-        if (!ImGui.CollapsingHeader("Settings"))
-            return;
-
-        using var indent = ImRaii.PushIndent();
-
-        var mountDistance = config.MountDistance;
-        ImGui.SetNextItemWidth(200);
-        if (ImGui.SliderFloat("mount and fly beyond", ref mountDistance, 5f, 150f, "%.0f yalms"))
-        {
-            config.MountDistance = mountDistance;
-            saveConfig();
-        }
-
-        var patience = config.RespawnPatienceSeconds;
-        ImGui.SetNextItemWidth(200);
-        if (ImGui.SliderFloat("wait at an empty spot", ref patience, 0f, 60f, "%.0f seconds"))
-        {
-            config.RespawnPatienceSeconds = patience;
-            saveConfig();
-        }
-
-        var notifications = config.Notifications;
-        if (ImGui.Checkbox("announce starts and finishes", ref notifications))
-        {
-            config.Notifications = notifications;
-            saveConfig();
-        }
-    }
-
-    /// <summary>
-    /// Draw an item's icon inline, leaving the cursor where the text should go.
-    /// Falls through silently when there is no icon, since a missing picture is
-    /// not worth a gap in the row.
-    /// </summary>
-    private void DrawItemIcon(MobIndex mobs, uint itemId)
-    {
-        var icon = mobs.ItemIcon(itemId);
-        if (icon == 0)
-            return;
-
-        if (textures.GetFromGameIcon(new GameIconLookup(icon)).GetWrapOrDefault() is not { } texture)
-            return;
-
-        var size = ImGui.GetTextLineHeight() * 1.4f;
-        ImGui.Image(texture.Handle, new Vector2(size, size));
-        ImGui.SameLine();
-    }
-
-    private void DrawSession(MobIndex mobs)
-    {
-        if (farming.Current is not { } session)
-            return;
-
         var progress = session.Progress;
-        ImGui.TextUnformatted($"{session.Mob.Name} in {session.Area.ZoneName}");
-        ImGui.TextDisabled($"{session.Phase}: {session.Status}");
+        var finished = session.Phase == FarmPhase.Finished;
 
-        // Counts read against their target where one was set, and plainly where
-        // none was: "3" and "3/50" say different things and only one of them is
-        // ever true.
-        var killTarget = session.Conditions.Conditions.OfType<KillCountCondition>().FirstOrDefault();
-        var timeTarget = session.Conditions.Conditions.OfType<ElapsedCondition>().FirstOrDefault();
+        ImGui.TextUnformatted(session.Mob.Name);
+        ImGui.TextDisabled(
+            $"{session.Area.ZoneName}  ({session.Area.MapCentre.X:F1}, {session.Area.MapCentre.Y:F1})"
+            + (session.Area.Spots.Count > 1 ? $"  {session.Area.Spots.Count} spots" : string.Empty));
 
-        var kills = killTarget is null ? $"kills {progress.Kills}" : $"kills {progress.Kills}/{killTarget.Target}";
-        var elapsed = timeTarget is null
+        ImGui.Spacing();
+        ImGui.TextUnformatted(finished
+            ? $"Finished: {session.Status}"
+            : $"{session.Phase}: {session.Status}");
+        ImGui.Spacing();
+
+        var kills = session.Conditions.Conditions.OfType<KillCountCondition>().FirstOrDefault();
+        var time = session.Conditions.Conditions.OfType<ElapsedCondition>().FirstOrDefault();
+
+        ImGui.TextUnformatted(kills is null
+            ? $"kills {progress.Kills}"
+            : $"kills {progress.Kills}/{kills.Target}");
+        ImGui.TextUnformatted(time is null
             ? $"elapsed {progress.Elapsed:hh\\:mm\\:ss}"
-            : $"elapsed {progress.Elapsed:hh\\:mm\\:ss}/{timeTarget.Limit:hh\\:mm\\:ss}";
-        ImGui.TextDisabled($"{kills}   {elapsed}");
+            : $"elapsed {progress.Elapsed:hh\\:mm\\:ss}/{time.Limit:hh\\:mm\\:ss}");
 
         var itemTargets = session.Conditions.Conditions
             .OfType<ItemCountCondition>()
             .ToDictionary(c => c.ItemId, c => c.Target);
 
-        // Wanted items are listed from the start, at zero, rather than appearing
-        // once the first one drops. A target sitting at nothing is information.
         foreach (var itemId in itemTargets.Keys.Concat(progress.ItemsGained.Keys).Distinct())
         {
             var have = progress.CountOf(itemId);
             DrawItemIcon(mobs, itemId);
-            ImGui.TextDisabled(itemTargets.TryGetValue(itemId, out var target)
+            ImGui.TextUnformatted(itemTargets.TryGetValue(itemId, out var target)
                 ? $"{mobs.ItemName(itemId)} {have}/{target}"
                 : $"{mobs.ItemName(itemId)} x{have}");
         }
 
-        if (ImGui.Button("Stop"))
-            farming.Stop();
-
+        ImGui.Spacing();
         ImGui.Separator();
+
+        if (!finished)
+        {
+            if (ImGui.Button("Stop"))
+                farming.Stop();
+            return;
+        }
+
+        if (ImGui.Button("Done"))
+            resultDismissed = true;
+
+        ImGui.SameLine();
+        if (!ImGui.Button("Farm this again"))
+            return;
+
+        resultDismissed = true;
+        Plan(session.Mob, session.Area);
     }
 
     private void DrawPlan(MobIndex mobs, MobEntry mob, FarmArea area)
@@ -184,6 +181,7 @@ public sealed class MainWindow : Window
             + (area.Spots.Count > 1 ? $" across {area.Spots.Count} spots" : string.Empty));
 
         ImGui.Spacing();
+        ImGui.Separator();
         ImGui.TextDisabled("Stop when");
 
         ImGui.SetNextItemWidth(120);
@@ -231,17 +229,69 @@ public sealed class MainWindow : Window
         else
             ImGui.TextDisabled("no target set, so it will run until you stop it");
 
+        ImGui.Separator();
+
         if (ImGui.Button("Start"))
         {
+            resultDismissed = false;
             farming.Start(mob, area, BuildConditions());
             ClearPlan();
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("Cancel"))
+        if (ImGui.Button("Back"))
             ClearPlan();
+    }
 
-        ImGui.Separator();
+    private void DrawSettingsTab()
+    {
+        using var tab = ImRaii.TabItem("Settings");
+        if (!tab)
+            return;
+
+        ImGui.Spacing();
+
+        var mountDistance = config.MountDistance;
+        ImGui.SetNextItemWidth(220);
+        if (ImGui.SliderFloat("mount and fly beyond", ref mountDistance, 5f, 150f, "%.0f yalms"))
+        {
+            config.MountDistance = mountDistance;
+            saveConfig();
+        }
+
+        var patience = config.RespawnPatienceSeconds;
+        ImGui.SetNextItemWidth(220);
+        if (ImGui.SliderFloat("wait at an empty spot", ref patience, 0f, 60f, "%.0f seconds"))
+        {
+            config.RespawnPatienceSeconds = patience;
+            saveConfig();
+        }
+
+        var notifications = config.Notifications;
+        if (ImGui.Checkbox("announce starts and finishes", ref notifications))
+        {
+            config.Notifications = notifications;
+            saveConfig();
+        }
+    }
+
+    /// <summary>
+    /// Draw an item's icon inline, leaving the cursor where the text should go.
+    /// Falls through silently when there is no icon, since a missing picture is
+    /// not worth a gap in the row.
+    /// </summary>
+    private void DrawItemIcon(MobIndex mobs, uint itemId)
+    {
+        var icon = mobs.ItemIcon(itemId);
+        if (icon == 0)
+            return;
+
+        if (textures.GetFromGameIcon(new GameIconLookup(icon)).GetWrapOrDefault() is not { } texture)
+            return;
+
+        var size = ImGui.GetTextLineHeight() * 1.4f;
+        ImGui.Image(texture.Handle, new Vector2(size, size));
+        ImGui.SameLine();
     }
 
     private void Plan(MobEntry mob, FarmArea area)
