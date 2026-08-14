@@ -85,6 +85,9 @@ public sealed class MobIndex
             if (spawn.BNpcNameId == 0 || spawn.TerritoryTypeId == 0)
                 continue;
 
+            if (SpawnPositions.IsUnknown(spawn.Position.X, spawn.Position.Y, spawn.Position.Z))
+                continue;
+
             if (!territories.TryGetRow(spawn.TerritoryTypeId, out var territory))
                 continue;
             if (!territory.Map.ValueNullable.HasValue)
