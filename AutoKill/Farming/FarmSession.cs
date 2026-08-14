@@ -91,6 +91,7 @@ public sealed class FarmSession
     private Vector3? resolvedSpot;
     private int spotIndex;
     private DateTime? emptySince;
+    private ulong chosen;
     private DateTime lastSample = DateTime.MinValue;
     private DateTime lastSighting = DateTime.MinValue;
     private readonly Dictionary<int, DateTime> clearedAt = [];
@@ -490,7 +491,7 @@ public sealed class FarmSession
                     navmesh.Stop();
                 Status = "mounting";
                 recorder?.Write("mount", new { remaining = Math.Round(remaining, 1) });
-                PlayerActions.Mount();
+                PlayerActions.Mount(PlayerActions.CanFlyIn(data, area.TerritoryTypeId));
                 return;
             }
         }
@@ -621,7 +622,23 @@ public sealed class FarmSession
             .ToList();
 
         var next = SpotRotation.PickNext(states, from, expected, jitter: 0.25);
-        recorder?.Write("advance", new { from, to = next, expected = expected.TotalSeconds });
+
+        // Every candidate with what it was judged on, because "why did it go
+        // there" is otherwise unanswerable after the fact.
+        recorder?.Write("advance", new
+        {
+            from,
+            to = next,
+            expectedRespawn = Math.Round(expected.TotalSeconds, 1),
+            candidates = states.Select(state => new
+            {
+                spot = state.Index,
+                spawns = state.SpawnCount,
+                away = Math.Round(state.Distance, 1),
+                clearedAgo = state.SinceCleared is { } ago ? Math.Round(ago.TotalSeconds, 1) : (double?)null,
+                score = Math.Round(SpotRotation.Score(state, expected), 3),
+            }),
+        });
         spotIndex = next;
         resolvedSpot = null;
         flagged = false;
@@ -663,6 +680,19 @@ public sealed class FarmSession
         emptySince = null;
         engaged.Add(quarry.GameObjectId);
 
+        if (chosen != quarry.GameObjectId)
+        {
+            chosen = quarry.GameObjectId;
+            recorder?.Write("target", new
+            {
+                id = quarry.GameObjectId,
+                away = Math.Round(Vector3.Distance(quarry.Position, player.Position), 1),
+                fromSpot = Math.Round(Vector3.Distance(quarry.Position, spot), 1),
+                inSight = Nearby(player),
+                phase = Phase.ToString(),
+            });
+        }
+
         var distance = Vector3.Distance(player.Position, quarry.Position);
 
         // Far enough to be worth riding to. Staying in the saddle between kills
@@ -686,7 +716,7 @@ public sealed class FarmSession
             {
                 lastMountAction = DateTime.UtcNow;
                 recorder?.Write("dismount", new { distance = Math.Round(distance, 1) });
-                PlayerActions.Dismount();
+                PlayerActions.Dismount(condition);
             }
 
             return;
@@ -774,7 +804,7 @@ public sealed class FarmSession
                 if (navmesh.Moving)
                     navmesh.Stop();
                 recorder?.Write("mount", new { remaining = Math.Round(Vector3.Distance(player.Position, destination), 1) });
-                PlayerActions.Mount();
+                PlayerActions.Mount(PlayerActions.CanFlyIn(data, area.TerritoryTypeId));
                 return;
             }
         }

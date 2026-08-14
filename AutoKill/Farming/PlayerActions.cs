@@ -11,13 +11,11 @@ namespace AutoKill.Farming;
 /// <summary>Small things the character does on the way to a fight.</summary>
 public static class PlayerActions
 {
-    // GeneralAction row 9. Roulette rather than a named mount, so it works for
-    // anyone without asking which mounts they own.
+    // GeneralAction rows 9 and 24. Roulettes rather than a named mount, so this
+    // works for anyone without asking which mounts they own, and the flying one
+    // where flight is possible.
     private const uint MountRoulette = 9;
-
-    // GeneralAction row 23. Nothing can be cast from the saddle, so the mount
-    // that made travel quick has to go before a single blow can be struck.
-    private const uint DismountAction = 23;
+    private const uint FlyingMountRoulette = 24;
 
     // GeneralAction row 2. On a flying mount this is what leaves the ground.
     private const uint JumpAction = 2;
@@ -53,10 +51,20 @@ public static class PlayerActions
         return manager != null && manager->GetActionStatus(ActionType.GeneralAction, MountRoulette) == 0;
     }
 
-    public static unsafe bool Mount()
+    /// <summary>
+    /// Summon a mount, preferring the flying roulette where flight is possible
+    /// so the thing summoned is one that can actually leave the ground.
+    /// </summary>
+    public static unsafe bool Mount(bool preferFlying)
     {
         var manager = ActionManager.Instance();
-        return manager != null && manager->UseAction(ActionType.GeneralAction, MountRoulette);
+        if (manager == null)
+            return false;
+
+        if (preferFlying && manager->GetActionStatus(ActionType.GeneralAction, FlyingMountRoulette) == 0)
+            return manager->UseAction(ActionType.GeneralAction, FlyingMountRoulette);
+
+        return manager->UseAction(ActionType.GeneralAction, MountRoulette);
     }
 
     /// <summary>
@@ -68,10 +76,26 @@ public static class PlayerActions
         return manager != null && manager->UseAction(ActionType.GeneralAction, JumpAction);
     }
 
-    public static unsafe bool Dismount()
+    /// <summary>
+    /// Get off the mount, which takes two presses from the air.
+    /// </summary>
+    /// <remarks>
+    /// This is the mount action itself rather than the dismount general action,
+    /// and pressing it while flying only ends the flight. A second press once
+    /// back on the ground is what actually dismounts, so callers press it until
+    /// the character is neither flying nor mounted rather than pressing once and
+    /// assuming it worked.
+    ///
+    /// A press is refused outright while jumping, which is worth knowing given
+    /// what leaving the ground involves.
+    /// </remarks>
+    public static unsafe bool Dismount(ICondition condition)
     {
+        if (condition[ConditionFlag.Jumping] || condition[ConditionFlag.Jumping61])
+            return false;
+
         var manager = ActionManager.Instance();
-        return manager != null && manager->UseAction(ActionType.GeneralAction, DismountAction);
+        return manager != null && manager->UseAction(ActionType.Mount, 0);
     }
 
     /// <summary>
