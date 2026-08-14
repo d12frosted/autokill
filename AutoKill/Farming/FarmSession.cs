@@ -45,7 +45,7 @@ public sealed class FarmSession
     private static readonly TimeSpan MoveCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MountCooldown = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(500);
-    private static readonly TimeSpan JumpCooldown = TimeSpan.FromMilliseconds(400);
+    private static readonly TimeSpan JumpCooldown = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan TeleportCooldown = TimeSpan.FromSeconds(10);
 
     private readonly MobEntry mob;
@@ -485,148 +485,6 @@ public sealed class FarmSession
             log.Warning("vnavmesh would not path to the farm spot.");
     }
 
-    private void TickHunt(IPlayerCharacter player)
-    {
-        if (clientState.TerritoryType != area.TerritoryTypeId)
-        {
-            Phase = FarmPhase.Teleporting;
-            return;
-        }
-
-        // Coming in on a flying mount. Get over the spot first, then dismount,
-        // which is what actually puts the character on the ground: pathing
-        // towards a floor point only ever hovers above it.
-        if (PlayerActions.IsFlying(condition))
-        {
-            var spotForLanding = ResolveSpot();
-            var overhead = Horizontally(player.Position, spotForLanding);
-
-            if (overhead > ArrivalRange)
-            {
-                Status = $"flying in ({overhead:F0}y)";
-                if (!navmesh.Moving
-                    && !navmesh.PathfindInProgress
-                    && DateTime.UtcNow - lastMove >= MoveCooldown)
-                {
-                    lastMove = DateTime.UtcNow;
-                    navmesh.MoveCloseTo(spotForLanding, ArrivalRange / 2f, true);
-                }
-
-                return;
-            }
-
-            Status = "landing";
-            if (navmesh.Moving)
-                navmesh.Stop();
-            if (DateTime.UtcNow - lastMountAction >= MountCooldown)
-            {
-                lastMountAction = DateTime.UtcNow;
-                // Recorded with what was actually standing about, because
-                // dismounting for an empty field is exactly the waste worth
-                // catching.
-                recorder?.Write("dismount", new { quarryNearby = FindQuarry(player, ResolveSpot(), HuntRadius, HuntRadius) is not null });
-                PlayerActions.Dismount();
-            }
-
-            return;
-        }
-
-        // Nothing can be cast from the saddle, so the mount that made the
-        // journey quick has to go before anything can be killed.
-        if (PlayerActions.IsMounted(condition))
-        {
-            Status = "dismounting";
-            if (navmesh.Moving)
-                navmesh.Stop();
-            if (DateTime.UtcNow - lastMountAction >= MountCooldown)
-            {
-                lastMountAction = DateTime.UtcNow;
-                // Recorded with what was actually standing about, because
-                // dismounting for an empty field is exactly the waste worth
-                // catching.
-                recorder?.Write("dismount", new { quarryNearby = FindQuarry(player, ResolveSpot(), HuntRadius, HuntRadius) is not null });
-                PlayerActions.Dismount();
-            }
-
-            return;
-        }
-
-        if (PlayerActions.IsMounting(condition))
-        {
-            Status = "dismounting";
-            return;
-        }
-
-        if (!wrath.Rotating && !wrath.Start())
-            Status = "no rotation backend, fighting is up to you";
-
-        var spot = ResolveSpot();
-        var quarry = FindQuarry(player, spot, LeashRadius, HuntRadius);
-
-        if (quarry is null)
-        {
-            emptySince ??= DateTime.UtcNow;
-
-            // Cleared. Standing about waiting for a respawn timer wastes the
-            // rest of the area, so move on round the circuit instead; by the
-            // time it comes back here this knot has repopulated.
-            if (DateTime.UtcNow - emptySince >= TimeSpan.FromSeconds(config.RespawnPatienceSeconds))
-            {
-                // Diverting to something on the way leaves the spot unreached,
-                // and the circuit should not skip it just because the detour
-                // came up empty.
-                if (Vector3.Distance(player.Position, spot) > ArrivalRange)
-                {
-                    emptySince = null;
-                    Phase = FarmPhase.Travelling;
-                    return;
-                }
-
-                AdvanceSpot();
-                return;
-            }
-
-            Status = area.Spots.Count > 1 ? "cleared, moving on" : "waiting for respawns";
-            if (Vector3.Distance(player.Position, spot) > ArrivalRange
-                && !navmesh.Moving
-                && DateTime.UtcNow - lastMove >= MoveCooldown)
-            {
-                lastMove = DateTime.UtcNow;
-                navmesh.MoveCloseTo(spot, ArrivalRange / 2f);
-            }
-
-            return;
-        }
-
-        emptySince = null;
-
-        engaged.Add(quarry.GameObjectId);
-        if (targets.Target?.GameObjectId != quarry.GameObjectId)
-            targets.Target = quarry;
-
-        var distance = Vector3.Distance(player.Position, quarry.Position);
-        Status = area.Spots.Count > 1
-            ? $"killing {mob.Name}, spot {spotIndex % area.Spots.Count + 1} of {area.Spots.Count}"
-            : $"killing {mob.Name}";
-
-        if (distance <= EngageRange)
-        {
-            if (navmesh.Moving)
-                navmesh.Stop();
-            return;
-        }
-
-        if (navmesh.Moving || navmesh.PathfindInProgress || DateTime.UtcNow - lastMove < MoveCooldown)
-            return;
-
-        lastMove = DateTime.UtcNow;
-        navmesh.MoveCloseTo(quarry.Position, EngageRange);
-    }
-
-    /// <summary>
-    /// The recorded spot dropped onto the ground. Published data carries no
-    /// usable height, so pathing to it raw either fails or aims at the sky.
-    /// </summary>
     private FarmLocation CurrentSpot => area.Spots[spotIndex % area.Spots.Count];
 
     /// <summary>
@@ -680,6 +538,160 @@ public sealed class FarmSession
         emptySince = null;
         navmesh.Stop();
         Phase = FarmPhase.Travelling;
+    }
+
+    private void TickHunt(IPlayerCharacter player)
+    {
+        if (clientState.TerritoryType != area.TerritoryTypeId)
+        {
+            Phase = FarmPhase.Teleporting;
+            return;
+        }
+
+        var spot = ResolveSpot();
+        var quarry = FindQuarry(player, spot, LeashRadius, HuntRadius);
+
+        if (quarry is null)
+        {
+            TickEmptySpot(player, spot);
+            return;
+        }
+
+        emptySince = null;
+        engaged.Add(quarry.GameObjectId);
+
+        var distance = Vector3.Distance(player.Position, quarry.Position);
+
+        // Far enough to be worth riding to. Staying in the saddle between kills
+        // is the whole point: dismounting on arrival and walking to everything
+        // afterwards was costing minutes per run.
+        if (distance > config.MountDistance)
+        {
+            Status = $"closing on {mob.Name} ({distance:F0}y)";
+            Approach(player, quarry.Position, EngageRange);
+            return;
+        }
+
+        // Close enough to fight, so get out of the saddle. Nothing can be cast
+        // from it, and in the air there is nothing to stand on.
+        if (PlayerActions.IsFlying(condition) || PlayerActions.IsMounted(condition))
+        {
+            Status = "dismounting";
+            if (navmesh.Moving)
+                navmesh.Stop();
+            if (DateTime.UtcNow - lastMountAction >= MountCooldown)
+            {
+                lastMountAction = DateTime.UtcNow;
+                recorder?.Write("dismount", new { distance = Math.Round(distance, 1) });
+                PlayerActions.Dismount();
+            }
+
+            return;
+        }
+
+        if (PlayerActions.IsMounting(condition))
+        {
+            Status = "dismounting";
+            return;
+        }
+
+        if (!wrath.Rotating && !wrath.Start())
+            Status = "no rotation backend, fighting is up to you";
+
+        if (targets.Target?.GameObjectId != quarry.GameObjectId)
+            targets.Target = quarry;
+
+        Status = area.Spots.Count > 1
+            ? $"killing {mob.Name}, spot {spotIndex % area.Spots.Count + 1} of {area.Spots.Count}"
+            : $"killing {mob.Name}";
+
+        if (distance <= EngageRange)
+        {
+            if (navmesh.Moving)
+                navmesh.Stop();
+            return;
+        }
+
+        if (navmesh.Moving || navmesh.PathfindInProgress || DateTime.UtcNow - lastMove < MoveCooldown)
+            return;
+
+        lastMove = DateTime.UtcNow;
+        navmesh.MoveCloseTo(quarry.Position, EngageRange);
+    }
+
+    /// <summary>
+    /// Nothing alive here. Stay in the saddle: the next thing to do is either
+    /// wait or move on, and neither is helped by standing on the ground.
+    /// </summary>
+    private void TickEmptySpot(IPlayerCharacter player, Vector3 spot)
+    {
+        emptySince ??= DateTime.UtcNow;
+
+        if (DateTime.UtcNow - emptySince >= TimeSpan.FromSeconds(config.RespawnPatienceSeconds))
+        {
+            // Diverting to something on the way leaves the spot unreached, and
+            // the circuit should not skip it just because the detour came up
+            // empty.
+            if (Vector3.Distance(player.Position, spot) > ArrivalRange)
+            {
+                emptySince = null;
+                Phase = FarmPhase.Travelling;
+                return;
+            }
+
+            AdvanceSpot();
+            return;
+        }
+
+        Status = area.Spots.Count > 1 ? "cleared, moving on" : "waiting for respawns";
+
+        if (Vector3.Distance(player.Position, spot) > ArrivalRange)
+            Approach(player, spot, ArrivalRange / 2f);
+    }
+
+    /// <summary>
+    /// Cover ground the way a person would: on a mount, in the air where that
+    /// is allowed, and without stopping to walk the last stretch.
+    /// </summary>
+    private void Approach(IPlayerCharacter player, Vector3 destination, float range)
+    {
+        var flying = PlayerActions.IsFlying(condition);
+
+        if (!flying && !PlayerActions.IsMounted(condition))
+        {
+            if (PlayerActions.IsMounting(condition))
+            {
+                Status = "mounting";
+                return;
+            }
+
+            if (PlayerActions.CanMount(condition) && DateTime.UtcNow - lastMountAction >= MountCooldown)
+            {
+                lastMountAction = DateTime.UtcNow;
+                if (navmesh.Moving)
+                    navmesh.Stop();
+                recorder?.Write("mount", new { remaining = Math.Round(Vector3.Distance(player.Position, destination), 1) });
+                PlayerActions.Mount();
+                return;
+            }
+        }
+        else if (!flying && PlayerActions.CanFlyIn(data, area.TerritoryTypeId))
+        {
+            // Jumping does not interrupt a path, so this happens alongside the
+            // journey rather than instead of it.
+            if (DateTime.UtcNow - lastJump >= JumpCooldown)
+            {
+                lastJump = DateTime.UtcNow;
+                recorder?.Write("takeoff", new { });
+                PlayerActions.Jump();
+            }
+        }
+
+        if (navmesh.Moving || navmesh.PathfindInProgress || DateTime.UtcNow - lastMove < MoveCooldown)
+            return;
+
+        lastMove = DateTime.UtcNow;
+        navmesh.MoveCloseTo(destination, range, flying);
     }
 
     /// <summary>
