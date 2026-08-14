@@ -2,20 +2,26 @@
 #
 # Install this plugin into a local XIV on Mac setup.
 #
-# AutoKill is not in any plugin repository, so rather than being copied into
-# installedPlugins it is registered as a dev plugin load location: dalamud loads
-# it straight out of the build directory. Rebuilding and reloading from the dev
-# plugins tab then picks up changes with nothing to copy.
+# AutoKill is not in any plugin repository, so it is installed as a dalamud dev
+# plugin: the build output is copied next to the game's own data and that copy
+# is registered as a dev plugin load location.
+#
+# The copy is not busywork. XIV on Mac is an App Sandboxed application, holding
+# only com.apple.security.files.user-selected.read-only, so the game process
+# cannot see a repository sitting in your home directory however the wine drive
+# maps. Dalamud reads the registration fine and then reports the path does not
+# exist. Anything under the XIV on Mac data directory is reachable, so the build
+# goes there.
 #
 # The game runs under wine, where / is mounted as Z:, so the path handed to
 # dalamud is the windows shaped one.
 #
-#   ./scripts/install.sh              build Debug and register
-#   ./scripts/install.sh --release    build Release and register
-#   ./scripts/install.sh --no-build   register whatever is already built
+#   ./scripts/install.sh              build Debug and install
+#   ./scripts/install.sh --release    build Release and install
+#   ./scripts/install.sh --no-build   install whatever is already built
 #   ./scripts/install.sh --dry-run    print what would happen, change nothing
-#   ./scripts/install.sh --status     show what is built and what is registered
-#   ./scripts/install.sh --uninstall  remove the registration, leave the build
+#   ./scripts/install.sh --status     show what is built and what is installed
+#   ./scripts/install.sh --uninstall  remove the registration and the copy
 #
 # Override the setup location with XOM_ROOT=/some/path.
 
@@ -50,6 +56,7 @@ while [ $# -gt 0 ]; do
 done
 
 BUILD_DIR="$REPO_ROOT/$PLUGIN/bin/$CONFIG"
+INSTALL_DIR="$XOM_ROOT/devPlugins/$PLUGIN"
 DALAMUD_CONFIG="$XOM_ROOT/dalamudConfig.json"
 BACKUP="$XOM_ROOT/dalamudConfig.json.autokill-backup"
 PLUGIN_CONFIG_DIR="$XOM_ROOT/pluginConfigs/$PLUGIN"
@@ -76,7 +83,7 @@ windows_path() {
 # with $type and $values wrappers, so both that shape and a plain array are
 # handled.
 config_tool() {
-    python3 - "$DALAMUD_CONFIG" "$(windows_path "$BUILD_DIR")" "$1" <<'PYTHON'
+    python3 - "$DALAMUD_CONFIG" "$(windows_path "$INSTALL_DIR")" "$1" <<'PYTHON'
 import json
 import pathlib
 import sys
@@ -99,44 +106,63 @@ else:
     node = config["DevPluginLoadLocations"] = {"$type": LIST_TYPE, "$values": []}
     values = node["$values"]
 
-def matches(entry):
-    return isinstance(entry, dict) and entry.get("Path", "").rstrip("\\") == target.rstrip("\\")
+def path_of(entry):
+    return entry.get("Path", "").rstrip("\\") if isinstance(entry, dict) else ""
+
+
+def is_target(entry):
+    return path_of(entry) == target.rstrip("\\")
+
+
+# Any earlier registration of this plugin, wherever it pointed. Installing has
+# moved location before, and leaving a stale entry behind means dalamud logs an
+# error about a path that no longer matters on every startup.
+def is_ours(entry):
+    return "autokill" in path_of(entry).lower()
+
+
+def save():
+    if isinstance(node, dict):
+        node["$values"] = values
+    else:
+        config["DevPluginLoadLocations"] = values
+    config_path.write_text(json.dumps(config, indent=2))
+
 
 if action == "status":
     for entry in values:
-        if matches(entry):
+        if is_target(entry):
             print("enabled" if entry.get("IsEnabled", True) else "disabled")
             break
     else:
-        print("absent")
+        stale = sum(1 for entry in values if is_ours(entry))
+        print(f"absent ({stale} stale entr{'y' if stale == 1 else 'ies'})" if stale else "absent")
     sys.exit(0)
 
 if action == "add":
+    stale = [entry for entry in values if is_ours(entry) and not is_target(entry)]
+    values[:] = [entry for entry in values if entry not in stale]
+
     for entry in values:
-        if matches(entry):
-            if entry.get("IsEnabled", True):
-                print("already registered")
-            else:
-                entry["IsEnabled"] = True
-                config_path.write_text(json.dumps(config, indent=2))
-                print("re-enabled")
+        if is_target(entry):
+            was_enabled = entry.get("IsEnabled", True)
+            entry["IsEnabled"] = True
+            save()
+            print("already registered" if was_enabled and not stale else "registered")
             sys.exit(0)
 
     values.append({"$type": ENTRY_TYPE, "Path": target, "IsEnabled": True})
-    config_path.write_text(json.dumps(config, indent=2))
-    print("registered")
+    save()
+    print(f"registered (cleared {len(stale)} stale)" if stale else "registered")
     sys.exit(0)
 
 if action == "remove":
-    remaining = [entry for entry in values if not matches(entry)]
+    remaining = [entry for entry in values if not is_ours(entry)]
     if len(remaining) == len(values):
         print("not registered")
         sys.exit(0)
-    if isinstance(node, dict):
-        node["$values"] = remaining
-    else:
-        config["DevPluginLoadLocations"] = remaining
-    config_path.write_text(json.dumps(config, indent=2))
+    values[:] = remaining
+    save()
     print("removed")
 PYTHON
 }
@@ -157,8 +183,14 @@ do_status() {
     else
         info "  built:    (nothing built yet)"
     fi
+    info "installed:  $INSTALL_DIR"
+    if [ -f "$INSTALL_DIR/$PLUGIN.dll" ]; then
+        info "  copied:   $(date -r "$INSTALL_DIR/$PLUGIN.dll" '+%Y-%m-%d %H:%M')"
+    else
+        info "  copied:   (nothing installed yet)"
+    fi
     info "dev plugin: $(config_tool status)"
-    info "  path:     $(windows_path "$BUILD_DIR")"
+    info "  path:     $(windows_path "$INSTALL_DIR")"
     info "config:     $PLUGIN_CONFIG_DIR"
 }
 
@@ -179,10 +211,20 @@ do_install() {
         [ -f "$BUILD_DIR/$PLUGIN.json" ] || die "no manifest at $BUILD_DIR/$PLUGIN.json"
     fi
 
+    if [ "$DRY" -eq 1 ]; then
+        info "  would: copy $(find "$BUILD_DIR" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ') files to $INSTALL_DIR"
+    else
+        info "installing -> $INSTALL_DIR"
+        mkdir -p "$INSTALL_DIR"
+        # clear first so files dropped between builds do not linger
+        find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+        find "$BUILD_DIR" -maxdepth 1 -type f -exec cp {} "$INSTALL_DIR/" \;
+    fi
+
     backup_once
 
     if [ "$DRY" -eq 1 ]; then
-        info "  would: register $(windows_path "$BUILD_DIR") as a dev plugin"
+        info "  would: register $(windows_path "$INSTALL_DIR") as a dev plugin"
     else
         info "dev plugin: $(config_tool add)"
     fi
@@ -190,16 +232,17 @@ do_install() {
     info ""
     info "done. start the game and run /autokill."
     info "settings will land in: $PLUGIN_CONFIG_DIR"
-    info "note: rebuilding is enough, then reload from dalamud's dev plugins tab."
+    info "note: after a rebuild, run this again to copy the new build across."
 }
 
 do_uninstall() {
     assert_game_stopped
     backup_once
     if [ "$DRY" -eq 1 ]; then
-        info "  would: remove $(windows_path "$BUILD_DIR") from the dev plugin locations"
+        info "  would: remove the dev plugin registration and $INSTALL_DIR"
     else
         info "dev plugin: $(config_tool remove)"
+        [ -d "$INSTALL_DIR" ] && rm -rf "$INSTALL_DIR" && info "removed $INSTALL_DIR"
     fi
 }
 

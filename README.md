@@ -46,10 +46,13 @@ To install it locally, quit the game and run:
 ./scripts/install.sh --uninstall  # take the registration back out
 ```
 
-It registers the build directory with Dalamud rather than copying anything, so after
-the first install a rebuild plus a reload from the dev plugins tab is enough. It refuses
-to run while the game is up, because Dalamud rewrites its configuration on exit and
-would throw the change away.
+It copies the build next to the game's own data and registers that copy as a dev plugin,
+so run it again after each rebuild. It refuses to run while the game is up, because
+Dalamud rewrites its configuration on exit and would throw the change away.
+
+The copy is needed because XIV on Mac is an App Sandboxed application. The game process
+cannot read a repository in your home directory however the Wine drive maps, so a dev
+plugin pointed straight at `bin/Debug` is reported as a path that does not exist.
 
 ## Data
 
