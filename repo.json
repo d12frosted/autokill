@@ -16,11 +16,11 @@
       "grind",
       "automation"
     ],
-    "AssemblyVersion": "0.0.1.0",
+    "AssemblyVersion": "0.0.2.0",
     "IconUrl": "https://raw.githubusercontent.com/d12frosted/autokill/main/AutoKill/images/icon.png",
-    "DownloadLinkInstall": "https://github.com/d12frosted/autokill/releases/download/v0.0.1/AutoKill.zip",
-    "DownloadLinkUpdate": "https://github.com/d12frosted/autokill/releases/download/v0.0.1/AutoKill.zip",
-    "DownloadLinkTesting": "https://github.com/d12frosted/autokill/releases/download/v0.0.1/AutoKill.zip",
+    "DownloadLinkInstall": "https://github.com/d12frosted/autokill/releases/download/v0.0.2/AutoKill.zip",
+    "DownloadLinkUpdate": "https://github.com/d12frosted/autokill/releases/download/v0.0.2/AutoKill.zip",
+    "DownloadLinkTesting": "https://github.com/d12frosted/autokill/releases/download/v0.0.2/AutoKill.zip",
     "IsHide": false,
     "IsTestingExclusive": false
   }
