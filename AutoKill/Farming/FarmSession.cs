@@ -59,6 +59,7 @@ public sealed class FarmSession
     private static readonly TimeSpan SightingInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan StuckAfter = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan CompanionInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan RejectionInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan TeleportCooldown = TimeSpan.FromSeconds(10);
 
     private readonly MobEntry mob;
@@ -99,6 +100,7 @@ public sealed class FarmSession
     private DateTime lastCompanionCheck = DateTime.MinValue;
     private bool companionWarned;
     private bool lastFly;
+    private DateTime lastRejection = DateTime.MinValue;
     private DateTime lastSample = DateTime.MinValue;
     private DateTime lastSighting = DateTime.MinValue;
     private readonly Dictionary<int, DateTime> clearedAt = [];
@@ -967,8 +969,12 @@ public sealed class FarmSession
     /// </summary>
     private void RecordRejections(IPlayerCharacter player)
     {
-        if (recorder is null)
+        // Every tick, unthrottled, this wrote two thousand records in five
+        // minutes and said the same thing each time.
+        if (recorder is null || DateTime.UtcNow - lastRejection < RejectionInterval)
             return;
+
+        lastRejection = DateTime.UtcNow;
 
         var rejected = objects.OfType<IBattleNpc>()
             .Where(npc => npc.NameId == mob.BNpcNameId)

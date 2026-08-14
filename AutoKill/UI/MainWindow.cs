@@ -446,19 +446,27 @@ public sealed class MainWindow : Window
 
         var mountDistance = config.MountDistance;
         ImGui.SetNextItemWidth(220);
-        if (ImGui.SliderFloat("mount and fly beyond", ref mountDistance, 5f, 150f, "%.0f yalms"))
+        if (ImGui.SliderFloat("mount with this much left to cover", ref mountDistance, 5f, 150f, "%.0f yalms"))
         {
             config.MountDistance = mountDistance;
             saveConfig();
         }
 
+        ImGui.TextDisabled("Ground still to walk, with attack range already taken off,");
+        ImGui.TextDisabled("so it means the same on a caster as on a melee job.");
+
+        ImGui.Spacing();
         var patience = config.RespawnPatienceSeconds;
         ImGui.SetNextItemWidth(220);
-        if (ImGui.SliderFloat("wait at an empty spot", ref patience, 0f, 60f, "%.0f seconds"))
+        if (ImGui.SliderFloat("look a little longer before moving on", ref patience, 0f, 30f, "%.0f seconds"))
         {
             config.RespawnPatienceSeconds = patience;
             saveConfig();
         }
+
+        ImGui.TextDisabled("Not a respawn wait: nothing comes back this quickly. It only stops");
+        ImGui.TextDisabled("a moment with nothing in view from sending it somewhere else.");
+        ImGui.Spacing();
 
         var notifications = config.Notifications;
         if (ImGui.Checkbox("announce starts and finishes", ref notifications))
