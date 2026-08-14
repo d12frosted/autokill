@@ -1,8 +1,13 @@
 namespace AutoKill.Core;
 
-/// <summary>One knot of a circuit, and how long since it was emptied.</summary>
+/// <summary>One knot of a circuit, how long since it was emptied, and how far off.</summary>
 /// <param name="SinceCleared">Null when it has never been cleared at all.</param>
-public readonly record struct SpotState(int Index, int SpawnCount, TimeSpan? SinceCleared);
+/// <param name="Distance">Yalms from wherever the character is now.</param>
+public readonly record struct SpotState(
+    int Index,
+    int SpawnCount,
+    TimeSpan? SinceCleared,
+    float Distance = 0f);
 
 /// <summary>
 /// Deciding where to go next round a farming circuit.
@@ -13,8 +18,13 @@ public readonly record struct SpotState(int Index, int SpawnCount, TimeSpan? Sin
 /// which is exactly what it looks like.
 ///
 /// So spots are scored on how far along they are towards repopulating, weighted
-/// by how many things live there, and close calls are settled by chance rather
-/// than by a rule.
+/// by how many things live there and divided by what it costs to get to them,
+/// and close calls are settled by chance rather than by a rule.
+///
+/// Distance matters because a scattered field is mostly travel: one run over
+/// twelve knots spent nearly half its time getting between them. It is damped
+/// rather than linear, so a full field a little further off still beats an empty
+/// one underfoot, and the circuit does not settle into the nearest corner.
 /// </remarks>
 public static class SpotRotation
 {
@@ -55,6 +65,11 @@ public static class SpotRotation
             var score = readiness * Math.Max(1, spot.SpawnCount);
             if (spot.SinceCleared is null)
                 score *= 2.0;
+
+            // Square root, so crossing a zone costs something without the
+            // nearest spot winning every time regardless of what is on it. The
+            // constant keeps anything within a short walk near enough free.
+            score /= Math.Sqrt(1.0 + (Math.Max(0f, spot.Distance) / 100.0));
 
             if (jitter > 0)
                 score *= 1.0 + ((random.NextDouble() - 0.5) * 2.0 * jitter);

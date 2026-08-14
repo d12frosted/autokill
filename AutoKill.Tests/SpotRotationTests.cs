@@ -7,8 +7,8 @@ public class SpotRotationTests
 {
     private static readonly TimeSpan Respawn = TimeSpan.FromSeconds(100);
 
-    private static SpotState Spot(int index, int spawns, double? clearedSecondsAgo) =>
-        new(index, spawns, clearedSecondsAgo is { } s ? TimeSpan.FromSeconds(s) : null);
+    private static SpotState Spot(int index, int spawns, double? clearedSecondsAgo, float away = 0f) =>
+        new(index, spawns, clearedSecondsAgo is { } s ? TimeSpan.FromSeconds(s) : null, away);
 
     [Fact]
     public void AnUnvisitedSpotComesFirst()
@@ -69,6 +69,31 @@ public class SpotRotationTests
     public void NoSpotsGivesTheCurrentOne()
     {
         Assert.Equal(3, SpotRotation.PickNext([], current: 3, Respawn, jitter: 0));
+    }
+
+    [Fact]
+    public void TheNearerOfTwoEquallyReadySpotsWins()
+    {
+        // Twelve scattered spots mean the walking between them is most of the
+        // run, so distance has to count for something.
+        SpotState[] spots = [Spot(0, 5, 0), Spot(1, 5, 200, away: 400f), Spot(2, 5, 200, away: 60f)];
+        Assert.Equal(2, SpotRotation.PickNext(spots, current: 0, Respawn, jitter: 0));
+    }
+
+    [Fact]
+    public void DistanceDoesNotOverrulePlentyMoreMobs()
+    {
+        // Close but nearly empty should still lose to a full field a little
+        // further off, or the circuit never leaves the nearest corner.
+        SpotState[] spots = [Spot(0, 5, 0), Spot(1, 20, 200, away: 200f), Spot(2, 1, 200, away: 80f)];
+        Assert.Equal(1, SpotRotation.PickNext(spots, current: 0, Respawn, jitter: 0));
+    }
+
+    [Fact]
+    public void SomewhereUnvisitedIsStillWorthTheWalk()
+    {
+        SpotState[] spots = [Spot(0, 5, 0), Spot(1, 5, 300, away: 40f), Spot(2, 5, null, away: 350f)];
+        Assert.Equal(2, SpotRotation.PickNext(spots, current: 0, Respawn, jitter: 0));
     }
 
     [Fact]
