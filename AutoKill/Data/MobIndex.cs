@@ -8,10 +8,17 @@ using LuminaSupplemental.Excel.Services;
 namespace AutoKill.Data;
 
 /// <summary>Somewhere a mob can be farmed, and how thickly it spawns there.</summary>
+/// <param name="Position">Where to path to, in world coordinates.</param>
+/// <param name="MapPosition">
+/// The same place in map coordinates. This is the pair the game shows and the
+/// only one worth putting in front of a player, since it is what the map, the
+/// minimap and every guide are written in.
+/// </param>
 public sealed record FarmLocation(
     uint TerritoryTypeId,
     string ZoneName,
     Vector3 Position,
+    Vector2 MapPosition,
     int SpawnCount,
     ushort Level);
 
@@ -200,10 +207,18 @@ public sealed class MobIndex
                 ? known.Average()
                 : 0f;
 
+            var map = territory.Map.ValueNullable;
+
             foreach (var spot in FarmSpots.Cluster(points, clusterRadius))
             {
                 var centre = spot.Centre with { Y = elevation };
-                locations.Add(new FarmLocation(territoryId, zone, centre, spot.Count, 0));
+                var onMap = map is { } m
+                    ? new Vector2(
+                        (float)MapCoordinates.ToMap(centre.X, m.SizeFactor, m.OffsetX),
+                        (float)MapCoordinates.ToMap(centre.Z, m.SizeFactor, m.OffsetY))
+                    : Vector2.Zero;
+
+                locations.Add(new FarmLocation(territoryId, zone, centre, onMap, spot.Count, 0));
             }
         }
 

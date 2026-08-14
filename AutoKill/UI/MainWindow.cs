@@ -113,7 +113,7 @@ public sealed class MainWindow : Window
     {
         ImGui.TextUnformatted($"Farm {mob.Name}");
         ImGui.TextDisabled(
-            $"{location.ZoneName}  ({location.Position.X:F0}, {location.Position.Z:F0})  "
+            $"{location.ZoneName}  ({location.MapPosition.X:F1}, {location.MapPosition.Y:F1})  "
             + $"x{location.SpawnCount}");
 
         ImGui.Spacing();
@@ -307,7 +307,7 @@ public sealed class MainWindow : Window
 
             ImGui.SameLine();
             ImGui.TextDisabled(
-                $"{location.ZoneName}  ({location.Position.X:F0}, {location.Position.Z:F0})  "
+                $"{location.ZoneName}  ({location.MapPosition.X:F1}, {location.MapPosition.Y:F1})  "
                 + $"x{location.SpawnCount}");
         }
 
