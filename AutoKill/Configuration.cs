@@ -23,4 +23,10 @@ public sealed class Configuration : IPluginConfiguration
 
     /// <summary>Announce starts and finishes in chat and as a toast.</summary>
     public bool Notifications { get; set; } = true;
+
+    /// <summary>
+    /// Write a trace of each run to disk, for working out afterwards where the
+    /// time actually went.
+    /// </summary>
+    public bool RecordRuns { get; set; }
 }

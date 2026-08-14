@@ -273,6 +273,19 @@ public sealed class MainWindow : Window
             config.Notifications = notifications;
             saveConfig();
         }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+
+        var record = config.RecordRuns;
+        if (ImGui.Checkbox("record runs to a trace file", ref record))
+        {
+            config.RecordRuns = record;
+            saveConfig();
+        }
+
+        ImGui.TextDisabled("One file per run under the plugin's config folder,");
+        ImGui.TextDisabled("recording where it went and what was standing nearby.");
     }
 
     /// <summary>

@@ -44,6 +44,7 @@ public sealed class FarmSession
 
     private static readonly TimeSpan MoveCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MountCooldown = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan JumpCooldown = TimeSpan.FromMilliseconds(400);
     private static readonly TimeSpan TeleportCooldown = TimeSpan.FromSeconds(10);
 
@@ -60,6 +61,7 @@ public sealed class FarmSession
     private readonly Notifier notifier;
     private readonly Func<uint, string> itemName;
     private readonly Configuration config;
+    private readonly RunRecorder? recorder;
     private readonly IPluginLog log;
 
     private readonly DateTime startedAt = DateTime.UtcNow;
@@ -75,6 +77,7 @@ public sealed class FarmSession
     private Vector3? resolvedSpot;
     private int spotIndex;
     private DateTime? emptySince;
+    private DateTime lastSample = DateTime.MinValue;
     private int kills;
 
     public FarmSession(
@@ -91,6 +94,7 @@ public sealed class FarmSession
         Notifier notifier,
         Func<uint, string> itemName,
         Configuration config,
+        RunRecorder? recorder,
         IPluginLog log)
     {
         this.mob = mob;
@@ -106,6 +110,7 @@ public sealed class FarmSession
         this.notifier = notifier;
         this.itemName = itemName;
         this.config = config;
+        this.recorder = recorder;
         this.log = log;
 
         // Anything already in the bags is not something this run produced.
@@ -114,6 +119,34 @@ public sealed class FarmSession
 
         Phase = FarmPhase.Teleporting;
         Status = "starting";
+
+        recorder?.Write("start", new
+        {
+            mob = mob.Name,
+            mobId = mob.BNpcNameId,
+            baseIds = mob.BaseIds,
+            zone = area.ZoneName,
+            territory = area.TerritoryTypeId,
+            spots = area.Spots.Select(spot => new
+            {
+                x = spot.Position.X,
+                z = spot.Position.Z,
+                mapX = spot.MapPosition.X,
+                mapY = spot.MapPosition.Y,
+                spawns = spot.SpawnCount,
+            }),
+            settings = new
+            {
+                config.MountDistance,
+                config.RespawnPatienceSeconds,
+                arrivalRange = ArrivalRange,
+                engageRange = EngageRange,
+                huntRadius = HuntRadius,
+                divertRadius = DivertRadius,
+                leashRadius = LeashRadius,
+            },
+            targets = conditions.Conditions.Select(c => c.GetType().Name),
+        });
     }
 
     public FarmPhase Phase { get; private set; }
@@ -150,6 +183,7 @@ public sealed class FarmSession
 
         RefreshGains();
         CountKills();
+        Record(player);
 
         var progress = Progress;
         if (conditions.ShouldStop(progress))
@@ -178,6 +212,50 @@ public sealed class FarmSession
 
     public void Finish(string reason) => Finish(reason, [], Progress);
 
+    /// <summary>
+    /// A periodic snapshot, plus where every matching mob was standing. The
+    /// second half is the point: it is what shows a target within reach being
+    /// walked past in favour of a spot on a map.
+    /// </summary>
+    private void Record(IPlayerCharacter player)
+    {
+        if (recorder is null || DateTime.UtcNow - lastSample < SampleInterval)
+            return;
+
+        lastSample = DateTime.UtcNow;
+        var spot = resolvedSpot;
+
+        recorder.Write("sample", new
+        {
+            phase = Phase.ToString(),
+            status = Status,
+            spot = spotIndex % Math.Max(1, area.Spots.Count),
+            x = Math.Round(player.Position.X, 1),
+            z = Math.Round(player.Position.Z, 1),
+            y = Math.Round(player.Position.Y, 1),
+            toSpot = spot is { } s ? Math.Round(Vector3.Distance(player.Position, s), 1) : (double?)null,
+            mounted = PlayerActions.IsMounted(condition),
+            flying = PlayerActions.IsFlying(condition),
+            inCombat = condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat],
+            moving = navmesh.Moving,
+            kills,
+            targetId = targets.Target?.GameObjectId,
+            nearby = objects
+                .OfType<IBattleNpc>()
+                .Where(npc => npc.NameId == mob.BNpcNameId && !npc.IsDead && npc.CurrentHp > 0)
+                .Select(npc => new
+                {
+                    id = npc.GameObjectId,
+                    d = Math.Round(Vector3.Distance(npc.Position, player.Position), 1),
+                    x = Math.Round(npc.Position.X, 1),
+                    z = Math.Round(npc.Position.Z, 1),
+                    engaged = npc.TargetObject is not null,
+                })
+                .OrderBy(n => n.d)
+                .Take(12),
+        });
+    }
+
     public void Finish(string reason, IReadOnlyList<IStopCondition> met, FarmProgress progress)
     {
         if (Phase == FarmPhase.Finished)
@@ -185,6 +263,8 @@ public sealed class FarmSession
 
         Phase = FarmPhase.Finished;
         Status = reason;
+        recorder?.Write("finish", new { reason, kills, elapsed = progress.Elapsed.TotalSeconds });
+        recorder?.Dispose();
         navmesh.Stop();
         wrath.Stop();
         log.Information($"Farming {mob.Name} stopped: {reason}");
@@ -349,6 +429,7 @@ public sealed class FarmSession
                 if (navmesh.Moving)
                     navmesh.Stop();
                 Status = "mounting";
+                recorder?.Write("mount", new { remaining = Math.Round(remaining, 1) });
                 PlayerActions.Mount();
                 return;
             }
@@ -370,6 +451,7 @@ public sealed class FarmSession
             if (DateTime.UtcNow - lastJump >= JumpCooldown)
             {
                 lastJump = DateTime.UtcNow;
+                recorder?.Write("takeoff", new { remaining = Math.Round(remaining, 1) });
                 PlayerActions.Jump();
             }
 
@@ -379,8 +461,13 @@ public sealed class FarmSession
         // Walking through something we came here to kill and then walking back
         // to it is daft. Flying past is left alone: landing early costs more
         // than the detour saves.
-        if (!flying && FindQuarry(player, spot, DivertRadius, 0f) is not null)
+        if (!flying && FindQuarry(player, spot, DivertRadius, 0f) is { } passing)
         {
+            recorder?.Write("divert", new
+            {
+                distance = Math.Round(Vector3.Distance(passing.Position, player.Position), 1),
+                stillToSpot = Math.Round(remaining, 1),
+            });
             navmesh.Stop();
             Phase = FarmPhase.Hunting;
             return;
@@ -434,6 +521,10 @@ public sealed class FarmSession
             if (DateTime.UtcNow - lastMountAction >= MountCooldown)
             {
                 lastMountAction = DateTime.UtcNow;
+                // Recorded with what was actually standing about, because
+                // dismounting for an empty field is exactly the waste worth
+                // catching.
+                recorder?.Write("dismount", new { quarryNearby = FindQuarry(player, ResolveSpot(), HuntRadius, HuntRadius) is not null });
                 PlayerActions.Dismount();
             }
 
@@ -450,6 +541,10 @@ public sealed class FarmSession
             if (DateTime.UtcNow - lastMountAction >= MountCooldown)
             {
                 lastMountAction = DateTime.UtcNow;
+                // Recorded with what was actually standing about, because
+                // dismounting for an empty field is exactly the waste worth
+                // catching.
+                recorder?.Write("dismount", new { quarryNearby = FindQuarry(player, ResolveSpot(), HuntRadius, HuntRadius) is not null });
                 PlayerActions.Dismount();
             }
 
@@ -559,6 +654,7 @@ public sealed class FarmSession
             return;
         }
 
+        recorder?.Write("advance", new { from = spotIndex % area.Spots.Count });
         spotIndex = (spotIndex + 1) % area.Spots.Count;
         resolvedSpot = null;
         flagged = false;

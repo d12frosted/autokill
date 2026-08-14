@@ -46,7 +46,7 @@ public sealed class Plugin : IDalamudPlugin
         wrath = new WrathIpc(PluginInterface, Log);
         farming = new FarmController(
             Framework, navmesh, wrath, ClientState, Objects, Targets, DataManager, Condition, notifier,
-            itemId => index?.ItemName(itemId) ?? $"item {itemId}", config, Log);
+            itemId => index?.ItemName(itemId) ?? $"item {itemId}", config, NewRecorder, Log);
 
         mainWindow = new MainWindow(() => index, farming, Textures, config, Save);
         windows.AddWindow(mainWindow);
@@ -84,6 +84,23 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenMainUi;
         windows.RemoveAllWindows();
+    }
+
+    /// <summary>
+    /// A trace per run, named for when it started, next to the plugin's own
+    /// configuration so it is easy to find and easy to delete.
+    /// </summary>
+    private RunRecorder? NewRecorder()
+    {
+        if (!config.RecordRuns)
+            return null;
+
+        var directory = Path.Combine(PluginInterface.ConfigDirectory.FullName, "traces");
+        var name = $"run-{DateTime.Now:yyyyMMdd-HHmmss}.jsonl";
+        var recorder = new RunRecorder(directory, name, Log);
+        if (recorder.Path is { } path)
+            Log.Information($"Recording this run to {path}");
+        return recorder;
     }
 
     private void Save()
