@@ -24,11 +24,15 @@
   <ItemGroup>
     <!--
       Mob drop tables and spawn positions. Neither is in the game's sheets.
-      Dalamud supplies Lumina itself, so take the data and leave its copy behind.
+      It does not declare a Lumina dependency of its own, so nothing here
+      competes with the Lumina that Dalamud already loads.
     -->
-    <PackageReference Include="LuminaSupplemental.Excel" Version="5.1.4">
-      <ExcludeAssets>runtime</ExcludeAssets>
-    </PackageReference>
+    <PackageReference Include="LuminaSupplemental.Excel" Version="5.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Dalamud needs the manifest sitting beside the assembly it loads. -->
+    <None Include="$(MSBuildProjectName).json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
