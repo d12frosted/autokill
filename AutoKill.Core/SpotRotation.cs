@@ -41,7 +41,6 @@ public static class SpotRotation
             return spots[0].Index;
 
         var random = seed is { } value ? new Random(value) : Random.Shared;
-        var respawn = expectedRespawn.TotalSeconds <= 0 ? 1.0 : expectedRespawn.TotalSeconds;
 
         var best = current;
         var bestScore = double.MinValue;
@@ -58,18 +57,7 @@ public static class SpotRotation
             // Past a full respawn there is nothing more to gain from waiting,
             // which is what keeps a big spot emptied seconds ago from outranking
             // a small one that is actually ready.
-            var readiness = spot.SinceCleared is { } since
-                ? Math.Clamp(since.TotalSeconds / respawn, 0.0, 1.0)
-                : 1.0;
-
-            var score = readiness * Math.Max(1, spot.SpawnCount);
-            if (spot.SinceCleared is null)
-                score *= 2.0;
-
-            // Square root, so crossing a zone costs something without the
-            // nearest spot winning every time regardless of what is on it. The
-            // constant keeps anything within a short walk near enough free.
-            score /= Math.Sqrt(1.0 + (Math.Max(0f, spot.Distance) / 100.0));
+            var score = Score(spot, expectedRespawn);
 
             if (jitter > 0)
                 score *= 1.0 + ((random.NextDouble() - 0.5) * 2.0 * jitter);
@@ -82,5 +70,31 @@ public static class SpotRotation
         }
 
         return best;
+    }
+
+    /// <summary>
+    /// What a spot is worth, before any jitter. Public so a run can record why
+    /// it went where it went rather than leaving the choice unexplained.
+    /// </summary>
+    public static double Score(SpotState spot, TimeSpan expectedRespawn)
+    {
+        var respawn = expectedRespawn.TotalSeconds <= 0 ? 1.0 : expectedRespawn.TotalSeconds;
+
+        // Never cleared beats everything: it has not been touched, so all of it
+        // is still standing. Past a full respawn there is nothing more to gain
+        // from waiting, which is what keeps a big spot emptied seconds ago from
+        // outranking a small one that is actually ready.
+        var readiness = spot.SinceCleared is { } since
+            ? Math.Clamp(since.TotalSeconds / respawn, 0.0, 1.0)
+            : 1.0;
+
+        var score = readiness * Math.Max(1, spot.SpawnCount);
+        if (spot.SinceCleared is null)
+            score *= 2.0;
+
+        // Square root, so crossing a zone costs something without the nearest
+        // spot winning every time regardless of what is on it. The constant
+        // keeps anything within a short walk near enough free.
+        return score / Math.Sqrt(1.0 + (Math.Max(0f, spot.Distance) / 100.0));
     }
 }
