@@ -15,7 +15,8 @@
     <DalamudLibPath Condition="'$(DalamudLibPath)' == '' AND Exists('$(HOME)/.xlcore/dalamud/Hooks/dev')">$(HOME)/.xlcore/dalamud/Hooks/dev/</DalamudLibPath>
   </PropertyGroup>
 
-  <Target Name="CheckDalamudLibPath" BeforeTargets="BeforeBuild">
+  <!-- Only projects that actually reference Dalamud need it present to build. -->
+  <Target Name="CheckDalamudLibPath" BeforeTargets="BeforeBuild" Condition="'$(UsesDalamud)' == 'true'">
     <Error Condition="!Exists('$(DalamudLibPath)Dalamud.dll')"
            Text="Dalamud.dll not found under '$(DalamudLibPath)'. Set DALAMUD_HOME to your Dalamud dev directory (the one containing Dalamud.dll)." />
   </Target>

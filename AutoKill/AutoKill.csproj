@@ -13,8 +13,13 @@
     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <UsesDalamud>true</UsesDalamud>
     <Version>0.0.1</Version>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AutoKill.Core\AutoKill.Core.csproj" />
+  </ItemGroup>
 
   <ItemGroup>
     <!--
