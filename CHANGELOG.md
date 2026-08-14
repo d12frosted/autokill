@@ -12,8 +12,11 @@ reading the diff. Dates are when the tag went out.
   set to what is left rather than the whole bill. The counts are the game's own,
   so they are right about kills from before you opened the window.
 
-  Elite bills are left out. Those are the B, A and S rank marks, which are one
-  rare spawn rather than something to grind.
+  The weekly elite bill is included. Every one of those names a B rank, which is
+  a mob one player is expected to kill, and marks are the best covered thing in
+  the position data: 74 of the 77 stand somewhere the plugin knows about. If the
+  mark is not up, the run patrols its spawn points until it is, which is what
+  hunting one looks like by hand.
 
 ## 0.0.3 - 2026-08-14
 

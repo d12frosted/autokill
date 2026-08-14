@@ -24,7 +24,11 @@ public sealed record HuntTarget(
     public bool Done => Remaining == 0;
 }
 
-public sealed record HuntBill(string Name, IReadOnlyList<HuntTarget> Targets)
+/// <param name="Elite">
+/// The weekly bill. One named mark, killed once, rather than three of something
+/// ordinary.
+/// </param>
+public sealed record HuntBill(string Name, bool Elite, IReadOnlyList<HuntTarget> Targets)
 {
     public bool Done => Targets.All(target => target.Done);
 }
@@ -38,14 +42,15 @@ public sealed record HuntBill(string Name, IReadOnlyList<HuntTarget> Targets)
 /// is guesswork. The kill counts are the game's own, which means they are right
 /// even about kills this plugin had nothing to do with.
 ///
-/// Elite bills are left out. Those are the B, A and S rank marks, which are one
-/// rare spawn rather than something to grind, and walking a character into an S
-/// rank unattended goes exactly one way.
+/// Elite bills are included. Every one of them names a B rank, which is a mob a
+/// single player is expected to kill: there are no A or S ranks on a bill. They
+/// are also the best covered thing here, since a mark stands in a handful of
+/// known places rather than wherever a field happens to spread.
 /// </remarks>
 public sealed class HuntBills(IDataManager data, IPluginLog log)
 {
-    /// <summary>Ordinary bills, as opposed to the elite ones.</summary>
-    private const byte OrdinaryBill = 1;
+    /// <summary>The weekly bill, naming one mark instead of five targets.</summary>
+    private const byte EliteBill = 2;
 
     public unsafe IReadOnlyList<HuntBill> Obtained()
     {
@@ -65,7 +70,7 @@ public sealed class HuntBills(IDataManager data, IPluginLog log)
             if (!state->MobHunt.IsMarkBillObtained(markIndex))
                 continue;
 
-            if (!types.TryGetRow(markIndex, out var type) || type.Type != OrdinaryBill)
+            if (!types.TryGetRow(markIndex, out var type))
                 continue;
 
             var rowId = state->MobHunt.GetObtainedHuntOrderRowId(markIndex);
@@ -108,7 +113,7 @@ public sealed class HuntBills(IDataManager data, IPluginLog log)
             }
 
             if (targets.Count > 0)
-                bills.Add(new HuntBill(BillName(type), targets));
+                bills.Add(new HuntBill(BillName(type), type.Type == EliteBill, targets));
         }
 
         return bills;

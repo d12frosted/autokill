@@ -18,12 +18,26 @@ killed.
 Two things need deciding: which bills to offer, and what to do about a target mob that
 also lives somewhere the bill did not name.
 
+Bills come in two kinds. The ordinary ones name five targets, three kills each for the
+common mobs and one for the named ones. The weekly elite bill names a single mark. Every
+elite bill target in the sheet is rank 1 in `NotoriousMonster`, which is a B rank: there
+are no A or S ranks on a bill, and a B rank is a mob one player is expected to kill.
+
+Coverage was measured against the shipped position data, by target and by the map the
+bill itself names:
+
+| bill kind | targets | positions on the named map |
+|---|---|---|
+| elite (B ranks) | 77 | 74 |
+| ordinary | 1,195 | 1,051 |
+
 ## Decision
 
 Read bills from the client every time the tab is drawn rather than caching. The counts
 change while a run is going, and a stale count is worse than a cheap read.
 
-Offer only ordinary bills, filtered by `MobHuntOrderType.Type`. Elite bills are excluded.
+Offer both kinds. An elite bill is marked as such in the window, since one mark killed
+once behaves nothing like three of something common.
 
 Offer only areas inside the territory the bill names, and say "nowhere recorded in that
 zone" rather than falling back to the same mob elsewhere.
@@ -37,11 +51,15 @@ outside it is logged and the bill skipped.
 
 - Kill counts are the game's own, so they are right about kills the plugin had nothing to
   do with: the bill picks up where it was left, whoever did the killing.
-- Elite bills are the B, A and S rank marks. Those are one rare spawn rather than
-  something to grind, and sending an unattended character into an S rank has one ending.
-  Named marks that appear inside ordinary bills are still offered, since they are
-  soloable, though community spawn data covers rare spawns poorly and many of them will
-  have nowhere recorded.
+- Elite bills are the best served of the lot. A mark stands in a handful of known places
+  rather than wherever a field happens to spread, so the circuit between those places is
+  exactly what hunting one looks like by hand: go round the spawn points until it is
+  there.
+- A mark that is not up means a run that patrols until it is, or until stopped. That is
+  the correct behaviour and the reason a time limit is worth setting on one.
+- Nothing here identifies a mob by anything but its `BNpcName` id, which every battle NPC
+  carries, so marks are found by the same code as everything else despite having no
+  `BNpcBase` id in the spawn data.
 - Refusing to fall back to another zone means a bill sometimes offers nothing. That is
   correct: kills in the wrong zone count for nothing towards the bill, so travelling there
   would be worse than doing nothing.

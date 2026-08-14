@@ -162,6 +162,12 @@ public sealed class MainWindow : Window
         foreach (var bill in bills)
         {
             ImGui.TextUnformatted(bill.Name);
+            if (bill.Elite)
+            {
+                ImGui.SameLine();
+                ImGui.TextDisabled("one mark, killed once");
+            }
+
             using var indent = ImRaii.PushIndent();
 
             foreach (var target in bill.Targets)

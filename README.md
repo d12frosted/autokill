@@ -28,10 +28,11 @@ and how many are still to find. Choosing one carries the amount through, so the 
 set as well as the target. Subcrafts are followed down, because a mob drop is never the
 item on the list, it is a hide two steps under it.
 
-**Or work off a hunt bill.** The Hunts tab shows the bills you are carrying and
-what is left on each. Pick a target and it goes to that mob, in the zone the bill
-names, with the kill count set to what is still owed. Elite marks are left out, since
-those are one rare spawn rather than something to grind.
+**Or work off a hunt bill.** The Hunts tab shows the bills you are carrying and what is
+left on each. Pick a target and it goes to that mob, in the zone the bill names, with the
+kill count set to what is still owed. That includes the weekly elite bill: every one of
+those names a B rank, and if the mark is not up the run patrols its spawn points until it
+is.
 
 **Farm an area, not a spot.** Mobs of one kind are spread over a field in several loose
 knots. AutoKill treats the whole field as one place, flies a circuit around it, and moves
