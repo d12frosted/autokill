@@ -2,55 +2,62 @@
   <!--
     AutoKill plugin icon.
 
-    Form follows the Dalamud plugin convention: a square with a bright frame, a
-    near black panel, and one flat line-art glyph. Colours are the d12frosted
-    palette, and there is deliberately no corner badge, since those belong to
-    the organisation that publishes a plugin.
+    Brutalist and jRPG, following d12frosted.io: sharp corners and no radius
+    anywhere, a bold frame, a light ground, and flat status colours. Deliberately
+    unlike the rounded dark gradient plugin icons it sits beside, because it is
+    not published by the people whose house style that is.
 
-    The glyph is a mark inside a patrol route, which is the thing this plugin
-    does that others do not: not merely kill something, but go round a field
-    killing it again each time it comes back.
+    The glyph is a mark inside a patrol route, which is what this plugin does
+    that others do not: go round a field killing the same thing each time it
+    comes back. The centre is critical red, since that is the point of it.
 
-    Gradients are in user space on purpose. Object bounding box gradients are
-    not painted at all on a shape with no width, which silently loses every
-    straight line in the drawing.
+    Two pieces of arithmetic hold the drawing together and neither survives
+    being nudged by eye:
+
+    - The route is 32 dots on a circle of radius 186, so the period is exactly a
+      thirty second of the circumference and a dot falls on each compass point,
+      squarely in line with the sights. Any other count leaves the ring visibly
+      rotated against the mark.
+    - The sights run from radius 127 to 170, between the mark at 119 and the
+      route at 179.5, so nothing touches anything. They are longer than they are
+      wide, or they read as floating squares rather than as sights.
+
+    Butt caps throughout. Round caps are what make the neighbouring icons look
+    soft, and softness is the opposite of the point here.
   -->
-  <defs>
-    <linearGradient id="warm" gradientUnits="userSpaceOnUse" x1="64" y1="64" x2="448" y2="448">
-      <stop offset="0" stop-color="#F0BC62"/>
-      <stop offset="1" stop-color="#E07A67"/>
-    </linearGradient>
-    <linearGradient id="warmFaint" gradientUnits="userSpaceOnUse" x1="64" y1="448" x2="448" y2="64">
-      <stop offset="0" stop-color="#F0BC62" stop-opacity="0.5"/>
-      <stop offset="1" stop-color="#E07A67" stop-opacity="0.5"/>
-    </linearGradient>
-  </defs>
+  <g stroke-linecap="butt" stroke-linejoin="miter">
+    <!-- frame -->
+    <rect x="0" y="0" width="512" height="512" fill="#1A1A1A"/>
+    <rect x="20" y="20" width="472" height="472" fill="#FAFAF8"/>
 
-  <rect x="0" y="0" width="512" height="512" rx="96" fill="url(#warm)"/>
-  <rect x="22" y="22" width="468" height="468" rx="76" fill="#1A1A1A"/>
+    <!-- status bar, as on the cards this borrows from -->
+    <rect x="20" y="446" width="472" height="46" fill="#5F87AF"/>
 
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <!-- the route, broken because it is walked again and again -->
-    <circle cx="256" cy="256" r="182" stroke="url(#warmFaint)" stroke-width="13"
-            stroke-dasharray="4 32"/>
+    <!--
+      The route. Circumference 2 * pi * 186 = 1168.672, thirty seconds of which
+      is 36.5210. Offset by half a dash so the first dot is centred on the
+      compass point rather than starting at it.
+    -->
+    <circle cx="256" cy="256" r="186" fill="none" stroke="#6B6B6B" stroke-width="13"
+            stroke-dasharray="7 29.5210" stroke-dashoffset="3.5"/>
 
-    <!-- the mark, open at the compass points so the sights read through -->
-    <g stroke="url(#warm)" stroke-width="32">
-      <path d="M 302 154 A 112 112 0 0 1 358 210"/>
-      <path d="M 358 302 A 112 112 0 0 1 302 358"/>
-      <path d="M 210 358 A 112 112 0 0 1 154 302"/>
-      <path d="M 154 210 A 112 112 0 0 1 210 154"/>
+    <!-- the mark, open at the compass points -->
+    <g fill="none" stroke="#1A1A1A" stroke-width="30">
+      <path d="M 353.7 291.6 A 104 104 0 0 1 291.6 353.7"/>
+      <path d="M 220.4 353.7 A 104 104 0 0 1 158.3 291.6"/>
+      <path d="M 158.3 220.4 A 104 104 0 0 1 220.4 158.3"/>
+      <path d="M 291.6 158.3 A 104 104 0 0 1 353.7 220.4"/>
     </g>
 
-    <!-- sights -->
-    <g stroke="url(#warm)" stroke-width="24">
-      <path d="M 256 92 V 156"/>
-      <path d="M 256 356 V 420"/>
-      <path d="M 92 256 H 156"/>
-      <path d="M 356 256 H 420"/>
+    <!-- sights, clear of both the mark and the route -->
+    <g fill="none" stroke="#1A1A1A" stroke-width="20">
+      <path d="M 256 86 V 129"/>
+      <path d="M 256 383 V 426"/>
+      <path d="M 86 256 H 129"/>
+      <path d="M 383 256 H 426"/>
     </g>
+
+    <!-- what the sights are on -->
+    <circle cx="256" cy="256" r="36" fill="#D66853"/>
   </g>
-
-  <!-- what the sights are on -->
-  <circle cx="256" cy="256" r="40" fill="url(#warm)"/>
 </svg>
