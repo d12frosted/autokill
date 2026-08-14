@@ -20,6 +20,7 @@ public sealed class FarmController : IDisposable
     private readonly Func<uint, string> itemName;
     private readonly Configuration config;
     private readonly Func<RunRecorder?> newRecorder;
+    private readonly Observations observations;
     private readonly IPluginLog log;
 
     public FarmController(
@@ -35,6 +36,7 @@ public sealed class FarmController : IDisposable
         Func<uint, string> itemName,
         Configuration config,
         Func<RunRecorder?> newRecorder,
+        Observations observations,
         IPluginLog log)
     {
         this.framework = framework;
@@ -49,6 +51,7 @@ public sealed class FarmController : IDisposable
         this.itemName = itemName;
         this.config = config;
         this.newRecorder = newRecorder;
+        this.observations = observations;
         this.log = log;
 
         framework.Update += OnUpdate;
@@ -65,7 +68,7 @@ public sealed class FarmController : IDisposable
     {
         Stop("replaced");
         Current = new FarmSession(
-            mob, area, conditions, navmesh, wrath, clientState, objects, targets, data, condition, notifier, itemName, config, newRecorder(), log);
+            mob, area, conditions, navmesh, wrath, clientState, objects, targets, data, condition, notifier, itemName, config, newRecorder(), observations, log);
         log.Information($"Farming {mob.Name} in {area.ZoneName}, {area.Spots.Count} spot(s).");
         notifier.Info($"farming {mob.Name} in {area.ZoneName}.");
     }

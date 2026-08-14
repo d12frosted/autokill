@@ -45,6 +45,7 @@ public sealed class FarmSession
     private static readonly TimeSpan MoveCooldown = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MountCooldown = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan SightingInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan JumpCooldown = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan TeleportCooldown = TimeSpan.FromSeconds(10);
 
@@ -62,6 +63,7 @@ public sealed class FarmSession
     private readonly Func<uint, string> itemName;
     private readonly Configuration config;
     private readonly RunRecorder? recorder;
+    private readonly Observations observations;
     private readonly IPluginLog log;
 
     private readonly DateTime startedAt = DateTime.UtcNow;
@@ -78,6 +80,8 @@ public sealed class FarmSession
     private int spotIndex;
     private DateTime? emptySince;
     private DateTime lastSample = DateTime.MinValue;
+    private DateTime lastSighting = DateTime.MinValue;
+    private readonly Dictionary<int, DateTime> clearedAt = [];
     private int kills;
 
     public FarmSession(
@@ -95,6 +99,7 @@ public sealed class FarmSession
         Func<uint, string> itemName,
         Configuration config,
         RunRecorder? recorder,
+        Observations observations,
         IPluginLog log)
     {
         this.mob = mob;
@@ -111,6 +116,7 @@ public sealed class FarmSession
         this.itemName = itemName;
         this.config = config;
         this.recorder = recorder;
+        this.observations = observations;
         this.log = log;
 
         // Anything already in the bags is not something this run produced.
@@ -225,6 +231,17 @@ public sealed class FarmSession
         lastSample = DateTime.UtcNow;
         var spot = resolvedSpot;
 
+        if (DateTime.UtcNow - lastSighting >= SightingInterval)
+        {
+            lastSighting = DateTime.UtcNow;
+            foreach (var npc in objects.OfType<IBattleNpc>()
+                         .Where(n => n.NameId == mob.BNpcNameId && !n.IsDead && n.CurrentHp > 0))
+            {
+                observations.RecordSighting(
+                    mob.BNpcNameId, area.TerritoryTypeId, npc.Position.X, npc.Position.Z);
+            }
+        }
+
         recorder.Write("sample", new
         {
             phase = Phase.ToString(),
@@ -265,6 +282,7 @@ public sealed class FarmSession
         Status = reason;
         recorder?.Write("finish", new { reason, kills, elapsed = progress.Elapsed.TotalSeconds });
         recorder?.Dispose();
+        observations.Save();
         navmesh.StopCompletely();
         wrath.Stop();
         log.Information($"Farming {mob.Name} stopped: {reason}");
@@ -531,8 +549,22 @@ public sealed class FarmSession
             return;
         }
 
-        recorder?.Write("advance", new { from = spotIndex % area.Spots.Count });
-        spotIndex = (spotIndex + 1) % area.Spots.Count;
+        var from = spotIndex % area.Spots.Count;
+        clearedAt[from] = DateTime.UtcNow;
+
+        var expected = observations.For(mob.BNpcNameId, area.TerritoryTypeId).TypicalRepopulation()
+                       ?? TimeSpan.FromSeconds(90);
+
+        var states = area.Spots
+            .Select((spot, i) => new SpotState(
+                i,
+                spot.SpawnCount,
+                clearedAt.TryGetValue(i, out var when) ? DateTime.UtcNow - when : null))
+            .ToList();
+
+        var next = SpotRotation.PickNext(states, from, expected, jitter: 0.25);
+        recorder?.Write("advance", new { from, to = next, expected = expected.TotalSeconds });
+        spotIndex = next;
         resolvedSpot = null;
         flagged = false;
         emptySince = null;
@@ -555,6 +587,19 @@ public sealed class FarmSession
         {
             TickEmptySpot(player, spot);
             return;
+        }
+
+        // Finding something here again closes the loop on how long this spot
+        // took to come back, which is what tells the circuit when to return.
+        if (clearedAt.Remove(spotIndex % area.Spots.Count, out var clearedWhen))
+        {
+            var taken = DateTime.UtcNow - clearedWhen;
+            observations.RecordRepopulation(mob.BNpcNameId, area.TerritoryTypeId, taken);
+            recorder?.Write("repopulated", new
+            {
+                spot = spotIndex % area.Spots.Count,
+                seconds = Math.Round(taken.TotalSeconds, 1),
+            });
         }
 
         emptySince = null;
@@ -760,6 +805,7 @@ public sealed class FarmSession
         {
             engaged.Remove(id);
             kills++;
+            observations.RecordKill(mob.BNpcNameId, area.TerritoryTypeId);
         }
     }
 
