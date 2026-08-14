@@ -3,15 +3,21 @@
 # Install this plugin into a local XIV on Mac setup.
 #
 # AutoKill is not in any plugin repository, so it is installed as a dalamud dev
-# plugin: the build output is copied next to the game's own data and that copy
-# is registered as a dev plugin load location.
+# plugin: the build output is copied next to the game's own data and the copied
+# assembly is registered as a dev plugin load location.
 #
-# The copy is not busywork. XIV on Mac is an App Sandboxed application, holding
-# only com.apple.security.files.user-selected.read-only, so the game process
-# cannot see a repository sitting in your home directory however the wine drive
-# maps. Dalamud reads the registration fine and then reports the path does not
-# exist. Anything under the XIV on Mac data directory is reachable, so the build
-# goes there.
+# Two things about that registration are easy to get wrong, and both fail with
+# dalamud reporting that the path does not exist:
+#
+#   - the path must name the assembly, not the folder holding it. Dalamud tests
+#     it with FileInfo.Exists, which is false for a directory.
+#   - DevMode has to be on. Dev plugin locations are only scanned when it is,
+#     so an otherwise perfect registration is simply skipped.
+#
+# The copy is a precaution rather than a diagnosed requirement: XIV on Mac is an
+# App Sandboxed application holding only files.user-selected.read-only, so a
+# repository in your home directory may well be unreadable by the game, while
+# everything under the XIV on Mac data directory is demonstrably reachable.
 #
 # The game runs under wine, where / is mounted as Z:, so the path handed to
 # dalamud is the windows shaped one.
@@ -83,7 +89,7 @@ windows_path() {
 # with $type and $values wrappers, so both that shape and a plain array are
 # handled.
 config_tool() {
-    python3 - "$DALAMUD_CONFIG" "$(windows_path "$INSTALL_DIR")" "$1" <<'PYTHON'
+    python3 - "$DALAMUD_CONFIG" "$(windows_path "$INSTALL_DIR/$PLUGIN.dll")" "$1" <<'PYTHON'
 import json
 import pathlib
 import sys
@@ -130,9 +136,10 @@ def save():
 
 
 if action == "status":
+    dev_mode = "" if config.get("DevMode") else ", but DevMode is off so it will be skipped"
     for entry in values:
         if is_target(entry):
-            print("enabled" if entry.get("IsEnabled", True) else "disabled")
+            print(("enabled" if entry.get("IsEnabled", True) else "disabled") + dev_mode)
             break
     else:
         stale = sum(1 for entry in values if is_ours(entry))
@@ -143,17 +150,26 @@ if action == "add":
     stale = [entry for entry in values if is_ours(entry) and not is_target(entry)]
     values[:] = [entry for entry in values if entry not in stale]
 
+    notes = []
+    if stale:
+        notes.append(f"cleared {len(stale)} stale")
+    # Dev plugin locations are only scanned when DevMode is on, so registering
+    # without it produces a correct entry that is silently never looked at.
+    if not config.get("DevMode"):
+        config["DevMode"] = True
+        notes.append("turned DevMode on")
+
     for entry in values:
         if is_target(entry):
-            was_enabled = entry.get("IsEnabled", True)
+            already = entry.get("IsEnabled", True) and not notes
             entry["IsEnabled"] = True
             save()
-            print("already registered" if was_enabled and not stale else "registered")
+            print("already registered" if already else f"registered ({', '.join(notes)})" if notes else "registered")
             sys.exit(0)
 
     values.append({"$type": ENTRY_TYPE, "Path": target, "IsEnabled": True})
     save()
-    print(f"registered (cleared {len(stale)} stale)" if stale else "registered")
+    print(f"registered ({', '.join(notes)})" if notes else "registered")
     sys.exit(0)
 
 if action == "remove":
@@ -162,8 +178,14 @@ if action == "remove":
         print("not registered")
         sys.exit(0)
     values[:] = remaining
+
+    note = ""
+    # Only give DevMode back if nothing else is relying on it.
+    if not remaining and config.get("DevMode"):
+        config["DevMode"] = False
+        note = " (turned DevMode back off)"
     save()
-    print("removed")
+    print("removed" + note)
 PYTHON
 }
 
@@ -190,7 +212,7 @@ do_status() {
         info "  copied:   (nothing installed yet)"
     fi
     info "dev plugin: $(config_tool status)"
-    info "  path:     $(windows_path "$INSTALL_DIR")"
+    info "  path:     $(windows_path "$INSTALL_DIR/$PLUGIN.dll")"
     info "config:     $PLUGIN_CONFIG_DIR"
 }
 
@@ -224,7 +246,7 @@ do_install() {
     backup_once
 
     if [ "$DRY" -eq 1 ]; then
-        info "  would: register $(windows_path "$INSTALL_DIR") as a dev plugin"
+        info "  would: register $(windows_path "$INSTALL_DIR/$PLUGIN.dll") as a dev plugin"
     else
         info "dev plugin: $(config_tool add)"
     fi
