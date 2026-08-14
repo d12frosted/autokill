@@ -35,6 +35,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private readonly Configuration config;
     private readonly Observations observations;
+    private readonly RunHistory history;
 
     private MobIndex? index;
 
@@ -45,14 +46,17 @@ public sealed class Plugin : IDalamudPlugin
         observations = new Observations(
             Path.Combine(PluginInterface.ConfigDirectory.FullName, "observations.json"), Log);
 
+        history = new RunHistory(
+            Path.Combine(PluginInterface.ConfigDirectory.FullName, "history.json"), Log);
+
         var navmesh = new NavmeshIpc(PluginInterface, Log);
         notifier = new Notifier(ChatGui, Toast) { Enabled = config.Notifications };
         wrath = new WrathIpc(PluginInterface, Log);
         farming = new FarmController(
             Framework, navmesh, wrath, ClientState, Objects, Targets, DataManager, Condition, notifier,
-            itemId => index?.ItemName(itemId) ?? $"item {itemId}", config, NewRecorder, observations, Log);
+            itemId => index?.ItemName(itemId) ?? $"item {itemId}", config, NewRecorder, observations, history, Log);
 
-        mainWindow = new MainWindow(() => index, farming, Textures, config, observations, Save);
+        mainWindow = new MainWindow(() => index, farming, Textures, config, observations, history, Save);
         windows.AddWindow(mainWindow);
 
         PluginInterface.UiBuilder.Draw += windows.Draw;

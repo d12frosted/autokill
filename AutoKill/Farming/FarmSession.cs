@@ -64,6 +64,7 @@ public sealed class FarmSession
     private readonly Configuration config;
     private readonly RunRecorder? recorder;
     private readonly Observations observations;
+    private readonly RunHistory history;
     private readonly IPluginLog log;
 
     private readonly DateTime startedAt = DateTime.UtcNow;
@@ -100,6 +101,7 @@ public sealed class FarmSession
         Configuration config,
         RunRecorder? recorder,
         Observations observations,
+        RunHistory history,
         IPluginLog log)
     {
         this.mob = mob;
@@ -117,6 +119,7 @@ public sealed class FarmSession
         this.config = config;
         this.recorder = recorder;
         this.observations = observations;
+        this.history = history;
         this.log = log;
 
         // Anything already in the bags is not something this run produced.
@@ -283,6 +286,7 @@ public sealed class FarmSession
         recorder?.Write("finish", new { reason, kills, elapsed = progress.Elapsed.TotalSeconds });
         recorder?.Dispose();
         observations.Save();
+        Remember(reason, progress);
         navmesh.StopCompletely();
         wrath.Stop();
         log.Information($"Farming {mob.Name} stopped: {reason}");
@@ -356,6 +360,33 @@ public sealed class FarmSession
         stop is ItemCountCondition item
             ? $"{itemName(item.ItemId)} {progress.CountOf(item.ItemId)}/{item.Target}"
             : stop.Describe(progress);
+
+    /// <summary>
+    /// File the run away, with what it was asked to do as well as what it did,
+    /// so repeating it asks for the same thing rather than starting blank.
+    /// </summary>
+    private void Remember(string reason, FarmProgress progress)
+    {
+        history.Add(new RunRecord
+        {
+            When = DateTime.Now,
+            MobId = mob.BNpcNameId,
+            MobName = mob.Name,
+            TerritoryId = area.TerritoryTypeId,
+            AreaX = area.Centre.X,
+            AreaZ = area.Centre.Z,
+            Kills = kills,
+            ElapsedSeconds = Math.Round(progress.Elapsed.TotalSeconds),
+            Reason = reason,
+            Gained = new Dictionary<uint, int>(gained),
+            KillTarget = conditions.Conditions.OfType<KillCountCondition>().FirstOrDefault()?.Target ?? 0,
+            MinuteTarget = conditions.Conditions.OfType<ElapsedCondition>().FirstOrDefault()?.Limit.TotalMinutes ?? 0,
+            ItemTargets = conditions.Conditions
+                .OfType<ItemCountCondition>()
+                .ToDictionary(c => c.ItemId, c => c.Target),
+            RequireAll = conditions.Mode == StopMode.All,
+        });
+    }
 
     private void TickTeleport(IPlayerCharacter player)
     {

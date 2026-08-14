@@ -30,6 +30,7 @@ public sealed class MainWindow : Window
     private readonly ITextureProvider textures;
     private readonly Configuration config;
     private readonly Observations observations;
+    private readonly RunHistory history;
     private readonly Action saveConfig;
 
     private string mobQuery = string.Empty;
@@ -52,6 +53,7 @@ public sealed class MainWindow : Window
         ITextureProvider textures,
         Configuration config,
         Observations observations,
+        RunHistory history,
         Action saveConfig)
         : base("AutoKill###AutoKillMain")
     {
@@ -60,6 +62,7 @@ public sealed class MainWindow : Window
         this.textures = textures;
         this.config = config;
         this.observations = observations;
+        this.history = history;
         this.saveConfig = saveConfig;
         SizeConstraints = new WindowSizeConstraints
         {
@@ -112,8 +115,100 @@ public sealed class MainWindow : Window
 
         DrawMobTab(mobs);
         DrawDropTab(mobs);
+        DrawHistoryTab(mobs);
         DrawLearnedTab(mobs);
         DrawSettingsTab();
+    }
+
+    /// <summary>
+    /// Finished runs, and a way to do one again.
+    /// </summary>
+    /// <remarks>
+    /// Repeating looks the area up afresh from the mob, the zone and roughly
+    /// where it was, rather than from a stored copy. Areas come from data that
+    /// changes between versions, and a saved one would keep sending runs to
+    /// spots that may no longer be there.
+    /// </remarks>
+    private void DrawHistoryTab(MobIndex mobs)
+    {
+        using var tab = ImRaii.TabItem("History");
+        if (!tab)
+            return;
+
+        if (history.Records.Count == 0)
+        {
+            ImGui.Spacing();
+            ImGui.TextDisabled("No runs yet.");
+            return;
+        }
+
+        ImGui.Spacing();
+        if (ImGui.Button("Clear history"))
+            history.ForgetEverything();
+
+        ImGui.Separator();
+
+        using var child = ImRaii.Child("##history", new Vector2(-1, -1));
+        if (!child)
+            return;
+
+        foreach (var run in history.Records.ToList())
+        {
+            using var id = ImRaii.PushId(run.When.Ticks.GetHashCode());
+
+            var elapsed = TimeSpan.FromSeconds(run.ElapsedSeconds);
+            ImGui.TextUnformatted($"{run.MobName}  in {mobs.ZoneName(run.TerritoryId)}");
+            ImGui.TextDisabled(
+                $"{run.When:d MMM HH:mm}   {run.Kills} killed in {elapsed:hh\\:mm\\:ss}   {run.Reason}");
+
+            foreach (var (itemId, count) in run.Gained)
+            {
+                DrawItemIcon(mobs, itemId);
+                ImGui.TextDisabled($"{count} {mobs.ItemName(itemId)}");
+            }
+
+            if (Repeatable(mobs, run) is not null)
+            {
+                if (ImGui.SmallButton("Repeat"))
+                    Repeat(mobs, run);
+            }
+            else
+            {
+                ImGui.TextDisabled("that area is no longer in the data");
+            }
+
+            ImGui.SameLine();
+            if (ImGui.SmallButton("Forget"))
+                history.Forget(run);
+
+            ImGui.Separator();
+        }
+    }
+
+    /// <summary>The area this run used, as the current data sees it.</summary>
+    private static FarmArea? Repeatable(MobIndex mobs, RunRecord run) =>
+        mobs.Get(run.MobId)?.Areas
+            .Where(a => a.TerritoryTypeId == run.TerritoryId)
+            .OrderBy(a => Vector2.Distance(
+                new Vector2(a.Centre.X, a.Centre.Z), new Vector2(run.AreaX, run.AreaZ)))
+            .FirstOrDefault();
+
+    private void Repeat(MobIndex mobs, RunRecord run)
+    {
+        if (mobs.Get(run.MobId) is not { } mob || Repeatable(mobs, run) is not { } area)
+            return;
+
+        killTarget = run.KillTarget;
+        minuteTarget = (int)Math.Round(run.MinuteTarget);
+        requireAll = run.RequireAll;
+
+        Plan(mob, area);
+
+        // Plan clears the goals and may preselect a searched item, so the
+        // remembered ones go in afterwards or they would be thrown away.
+        itemGoals.Clear();
+        foreach (var (itemId, count) in run.ItemTargets)
+            itemGoals[itemId] = count;
     }
 
     /// <summary>
