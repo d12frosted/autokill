@@ -732,7 +732,7 @@ public sealed class MainWindow : Window
     private void DrawCraftingMaterials(MobIndex mobs)
     {
         var farmable = craftingMaterials
-            .Where(material => mobs.MobsDropping(material.ItemId).Count > 0)
+            .Where(material => !material.Crystal && mobs.MobsDropping(material.ItemId).Count > 0)
             .ToList();
 
         var rest = craftingMaterials.Count - farmable.Count;
@@ -740,7 +740,7 @@ public sealed class MainWindow : Window
         if (farmable.Count == 0)
         {
             ImGui.Spacing();
-            ImGui.TextDisabled("Nothing on this list is dropped by a mob.");
+            ImGui.TextDisabled("Nothing on this list is worth farming a mob for.");
             if (rest > 0)
                 ImGui.TextDisabled($"Its {rest} material(s) are gathered, bought or crafted.");
             return;

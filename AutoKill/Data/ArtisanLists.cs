@@ -10,7 +10,12 @@ namespace AutoKill.Data;
 public sealed record CraftingList(int Id, string Name, IReadOnlyList<CraftEntry> Entries);
 
 /// <summary>Something a list asks you to bring, with enough to show a row for it.</summary>
-public sealed record ListMaterial(uint ItemId, string Name, ushort Icon, int Required);
+/// <param name="Crystal">
+/// Shards, crystals and clusters. Mobs do drop them, and every list wants
+/// hundreds, so without this they sit at the top of every list and bury the one
+/// row worth farming. Nobody has ever farmed a mob for a crystal.
+/// </param>
+public sealed record ListMaterial(uint ItemId, string Name, ushort Icon, int Required, bool Crystal);
 
 /// <summary>
 /// Crafting lists read out of Artisan.
@@ -31,6 +36,9 @@ public sealed class ArtisanLists(string path, IDataManager data, IPluginLog log)
 
     // Stopping the file being stat'd on every frame the tab is drawn.
     private static readonly TimeSpan CheckEvery = TimeSpan.FromSeconds(1);
+
+    /// <summary>The ItemUICategory shards, crystals and clusters all share.</summary>
+    private const uint Crystals = 59;
 
     private DateTime lastChecked = DateTime.MinValue;
     private DateTime lastWritten = DateTime.MinValue;
@@ -106,8 +114,13 @@ public sealed class ArtisanLists(string path, IDataManager data, IPluginLog log)
 
         return CraftingLists.Materials(list.Entries, RecipeById, RecipeForItem)
             .Select(pair => items.TryGetRow(pair.Key, out var item)
-                ? new ListMaterial(pair.Key, item.Name.ExtractText(), item.Icon, pair.Value)
-                : new ListMaterial(pair.Key, $"item {pair.Key}", 0, pair.Value))
+                ? new ListMaterial(
+                    pair.Key,
+                    item.Name.ExtractText(),
+                    item.Icon,
+                    pair.Value,
+                    item.ItemUICategory.RowId == Crystals)
+                : new ListMaterial(pair.Key, $"item {pair.Key}", 0, pair.Value, false))
             .OrderByDescending(material => material.Required)
             .ThenBy(material => material.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
