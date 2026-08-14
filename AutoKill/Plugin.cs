@@ -1,4 +1,7 @@
+using AutoKill.Data;
+using AutoKill.UI;
 using Dalamud.Game.Command;
+using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
@@ -11,26 +14,54 @@ public sealed class Plugin : IDalamudPlugin
 
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
+    [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
 
+    private readonly WindowSystem windows = new("AutoKill");
+    private readonly MainWindow mainWindow;
+
+    private MobIndex? index;
+
     public Plugin()
     {
+        mainWindow = new MainWindow(() => index);
+        windows.AddWindow(mainWindow);
+
+        PluginInterface.UiBuilder.Draw += windows.Draw;
+        PluginInterface.UiBuilder.OpenMainUi += OpenMainUi;
+        PluginInterface.UiBuilder.OpenConfigUi += OpenMainUi;
+
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Farm a mob until a kill or drop target is reached.",
+            HelpMessage = "Open AutoKill. Search for a mob, or for something you want it to drop.",
         });
 
-        Log.Information("AutoKill loaded.");
+        // Joining tens of thousands of spawn rows has no business blocking the
+        // framework thread while the game is still loading in.
+        Task.Run(() =>
+        {
+            try
+            {
+                index = MobIndex.Build(DataManager, Log);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to build the mob index.");
+            }
+        });
     }
 
     public void Dispose()
     {
         CommandManager.RemoveHandler(CommandName);
+        PluginInterface.UiBuilder.Draw -= windows.Draw;
+        PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;
+        PluginInterface.UiBuilder.OpenConfigUi -= OpenMainUi;
+        windows.RemoveAllWindows();
     }
 
-    private void OnCommand(string command, string args)
-    {
-        ChatGui.Print("AutoKill is still just a scaffold.");
-    }
+    private void OpenMainUi() => mainWindow.IsOpen = true;
+
+    private void OnCommand(string command, string args) => mainWindow.Toggle();
 }
