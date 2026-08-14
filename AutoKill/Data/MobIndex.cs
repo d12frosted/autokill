@@ -238,6 +238,10 @@ public sealed class MobIndex
 
     public MobEntry? Get(uint bNpcNameId) => byNameId.GetValueOrDefault(bNpcNameId);
 
+    /// <summary>The name of a droppable item, for picking one out of a list.</summary>
+    public string ItemName(uint itemId) =>
+        droppableItemNames.TryGetValue(itemId, out var name) ? name : $"item {itemId}";
+
     /// <summary>Mobs whose name contains the query, the ones you can actually reach first.</summary>
     public IReadOnlyList<MobEntry> SearchMobs(string query, int limit = 50)
     {

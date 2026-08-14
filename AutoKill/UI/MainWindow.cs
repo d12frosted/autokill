@@ -9,9 +9,9 @@ using Dalamud.Interface.Windowing;
 namespace AutoKill.UI;
 
 /// <summary>
-/// Two ways into the same question: pick the mob, or pick what you want it to
-/// drop and let the index work out which mob that is. Either way it ends at a
-/// farm spot with a Farm button.
+/// Search, then plan, then run. Choosing a spot stages a plan rather than
+/// starting one: a run that begins before its goal is set is a run whose goal
+/// arrives too late to mean anything.
 /// </summary>
 public sealed class MainWindow : Window
 {
@@ -24,8 +24,10 @@ public sealed class MainWindow : Window
     private string selectedItemName = string.Empty;
     private MobEntry? selectedMob;
 
+    private MobEntry? plannedMob;
+    private FarmLocation? plannedLocation;
+    private readonly Dictionary<uint, int> itemGoals = [];
     private int killTarget;
-    private int itemTarget;
     private int minuteTarget;
     private bool requireAll;
 
@@ -36,7 +38,7 @@ public sealed class MainWindow : Window
         this.farming = farming;
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(480, 360),
+            MinimumSize = new Vector2(520, 400),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
         };
     }
@@ -53,9 +55,10 @@ public sealed class MainWindow : Window
         if (farming.Blocker is { } blocker)
             ImGui.TextColored(new Vector4(1f, 0.6f, 0.3f, 1f), blocker);
 
-        DrawSession();
-        DrawTargets();
-        ImGui.Separator();
+        if (farming.Running)
+            DrawSession(mobs);
+        else if (plannedMob is not null && plannedLocation is not null)
+            DrawPlan(mobs, plannedMob, plannedLocation);
 
         using var tabs = ImRaii.TabBar("##autokill-tabs");
         if (!tabs)
@@ -65,7 +68,7 @@ public sealed class MainWindow : Window
         DrawDropTab(mobs);
     }
 
-    private void DrawSession()
+    private void DrawSession(MobIndex mobs)
     {
         if (farming.Current is not { } session)
             return;
@@ -73,54 +76,111 @@ public sealed class MainWindow : Window
         var progress = session.Progress;
         ImGui.TextUnformatted($"{session.Mob.Name} in {session.Location.ZoneName}");
         ImGui.TextDisabled($"{session.Phase}: {session.Status}");
-        ImGui.TextDisabled(
-            $"kills {progress.Kills}   elapsed {progress.Elapsed:hh\\:mm\\:ss}"
-            + string.Concat(progress.ItemsGained.Select(g => $"   item {g.Key} x{g.Value}")));
+        ImGui.TextDisabled($"kills {progress.Kills}   elapsed {progress.Elapsed:hh\\:mm\\:ss}");
 
-        if (farming.Running && ImGui.Button("Stop"))
+        foreach (var (itemId, count) in progress.ItemsGained)
+            ImGui.TextDisabled($"{mobs.ItemName(itemId)} x{count}");
+
+        if (ImGui.Button("Stop"))
             farming.Stop();
 
         ImGui.Separator();
     }
 
-    private void DrawTargets()
+    private void DrawPlan(MobIndex mobs, MobEntry mob, FarmLocation location)
     {
-        ImGui.TextDisabled("Stop when");
-        ImGui.SetNextItemWidth(120);
-        ImGui.InputInt("kills##target", ref killTarget);
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(120);
-        ImGui.InputInt("minutes##target", ref minuteTarget);
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(120);
-        ImGui.InputInt("drops##target", ref itemTarget);
+        ImGui.TextUnformatted($"Farm {mob.Name}");
+        ImGui.TextDisabled(
+            $"{location.ZoneName}  ({location.Position.X:F0}, {location.Position.Z:F0})  "
+            + $"x{location.SpawnCount}");
 
-        if (selectedItem != 0 && itemTarget > 0)
+        ImGui.Spacing();
+        ImGui.TextDisabled("Stop when");
+
+        ImGui.SetNextItemWidth(120);
+        ImGui.InputInt("kills", ref killTarget);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(120);
+        ImGui.InputInt("minutes", ref minuteTarget);
+
+        if (mob.Drops.Count > 0)
         {
-            ImGui.SameLine();
-            ImGui.TextDisabled($"of {selectedItemName}");
+            ImGui.Spacing();
+            ImGui.TextDisabled("Collect");
+            foreach (var itemId in mob.Drops)
+            {
+                using var id = ImRaii.PushId((int)itemId);
+
+                var wanted = itemGoals.ContainsKey(itemId);
+                if (ImGui.Checkbox($"{mobs.ItemName(itemId)}##want", ref wanted))
+                {
+                    if (wanted)
+                        itemGoals[itemId] = 1;
+                    else
+                        itemGoals.Remove(itemId);
+                }
+
+                if (!wanted)
+                    continue;
+
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(100);
+                var quantity = itemGoals[itemId];
+                if (ImGui.InputInt("##quantity", ref quantity))
+                    itemGoals[itemId] = Math.Max(1, quantity);
+            }
+        }
+        else
+        {
+            ImGui.TextDisabled("Nothing known drops from this one.");
         }
 
-        ImGui.Checkbox("meet every target, not just one", ref requireAll);
-        if (killTarget <= 0 && minuteTarget <= 0 && itemTarget <= 0)
-            ImGui.TextDisabled("nothing set, so it runs until you stop it");
+        ImGui.Spacing();
+        if (killTarget > 0 || minuteTarget > 0 || itemGoals.Count > 0)
+            ImGui.Checkbox("meet every target, not just the first", ref requireAll);
+        else
+            ImGui.TextDisabled("no target set, so it will run until you stop it");
+
+        if (ImGui.Button("Start"))
+        {
+            farming.Start(mob, location, BuildConditions());
+            ClearPlan();
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Cancel"))
+            ClearPlan();
+
+        ImGui.Separator();
     }
 
-    private StopConditions BuildConditions(MobEntry mob)
+    private void Plan(MobEntry mob, FarmLocation location)
+    {
+        plannedMob = mob;
+        plannedLocation = location;
+        itemGoals.Clear();
+
+        // Arriving from an item search means the item is already known, so do
+        // not make it be picked out of the list a second time.
+        if (selectedItem != 0 && mob.Drops.Contains(selectedItem))
+            itemGoals[selectedItem] = 1;
+    }
+
+    private void ClearPlan()
+    {
+        plannedMob = null;
+        plannedLocation = null;
+    }
+
+    private StopConditions BuildConditions()
     {
         var conditions = new List<IStopCondition>();
         if (killTarget > 0)
             conditions.Add(new KillCountCondition(killTarget));
         if (minuteTarget > 0)
             conditions.Add(new ElapsedCondition(TimeSpan.FromMinutes(minuteTarget)));
-        if (itemTarget > 0)
-        {
-            // The item being searched for if there is one, otherwise whatever
-            // this mob is known to drop.
-            var itemId = selectedItem != 0 ? selectedItem : mob.Drops.FirstOrDefault();
-            if (itemId != 0)
-                conditions.Add(new ItemCountCondition(itemId, itemTarget));
-        }
+        foreach (var (itemId, quantity) in itemGoals)
+            conditions.Add(new ItemCountCondition(itemId, quantity));
 
         // Never keep going after dying or filling the bags, whatever else is set.
         conditions.Add(new DeathCondition());
@@ -220,8 +280,8 @@ public sealed class MainWindow : Window
         {
             using var id = ImRaii.PushId($"{mob.BNpcNameId}-{location.TerritoryTypeId}-{location.Position.X:F0}");
 
-            if (ImGui.SmallButton("Farm"))
-                farming.Start(mob, location, BuildConditions(mob));
+            if (ImGui.SmallButton("Choose"))
+                Plan(mob, location);
 
             ImGui.SameLine();
             ImGui.TextDisabled(
