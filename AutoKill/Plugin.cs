@@ -30,20 +30,25 @@ public sealed class Plugin : IDalamudPlugin
     private readonly WindowSystem windows = new("AutoKill");
     private readonly MainWindow mainWindow;
     private readonly WrathIpc wrath;
+    private readonly Notifier notifier;
     private readonly FarmController farming;
+
+    private readonly Configuration config;
 
     private MobIndex? index;
 
     public Plugin()
     {
+        config = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
+
         var navmesh = new NavmeshIpc(PluginInterface);
-        var notifier = new Notifier(ChatGui, Toast);
+        notifier = new Notifier(ChatGui, Toast) { Enabled = config.Notifications };
         wrath = new WrathIpc(PluginInterface, Log);
         farming = new FarmController(
             Framework, navmesh, wrath, ClientState, Objects, Targets, DataManager, Condition, notifier,
-            itemId => index?.ItemName(itemId) ?? $"item {itemId}", Log);
+            itemId => index?.ItemName(itemId) ?? $"item {itemId}", config, Log);
 
-        mainWindow = new MainWindow(() => index, farming, Textures);
+        mainWindow = new MainWindow(() => index, farming, Textures, config, Save);
         windows.AddWindow(mainWindow);
 
         PluginInterface.UiBuilder.Draw += windows.Draw;
@@ -79,6 +84,12 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenMainUi;
         windows.RemoveAllWindows();
+    }
+
+    private void Save()
+    {
+        PluginInterface.SavePluginConfig(config);
+        notifier.Enabled = config.Notifications;
     }
 
     private void OpenMainUi() => mainWindow.IsOpen = true;

@@ -20,6 +20,8 @@ public sealed class MainWindow : Window
     private readonly Func<MobIndex?> index;
     private readonly FarmController farming;
     private readonly ITextureProvider textures;
+    private readonly Configuration config;
+    private readonly Action saveConfig;
 
     private string mobQuery = string.Empty;
     private string itemQuery = string.Empty;
@@ -34,12 +36,19 @@ public sealed class MainWindow : Window
     private int minuteTarget;
     private bool requireAll;
 
-    public MainWindow(Func<MobIndex?> index, FarmController farming, ITextureProvider textures)
+    public MainWindow(
+        Func<MobIndex?> index,
+        FarmController farming,
+        ITextureProvider textures,
+        Configuration config,
+        Action saveConfig)
         : base("AutoKill###AutoKillMain")
     {
         this.index = index;
         this.farming = farming;
         this.textures = textures;
+        this.config = config;
+        this.saveConfig = saveConfig;
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(520, 400),
@@ -64,12 +73,45 @@ public sealed class MainWindow : Window
         else if (plannedMob is not null && plannedArea is not null)
             DrawPlan(mobs, plannedMob, plannedArea);
 
+        DrawSettings();
+
         using var tabs = ImRaii.TabBar("##autokill-tabs");
         if (!tabs)
             return;
 
         DrawMobTab(mobs);
         DrawDropTab(mobs);
+    }
+
+    private void DrawSettings()
+    {
+        if (!ImGui.CollapsingHeader("Settings"))
+            return;
+
+        using var indent = ImRaii.PushIndent();
+
+        var mountDistance = config.MountDistance;
+        ImGui.SetNextItemWidth(200);
+        if (ImGui.SliderFloat("mount and fly beyond", ref mountDistance, 5f, 150f, "%.0f yalms"))
+        {
+            config.MountDistance = mountDistance;
+            saveConfig();
+        }
+
+        var patience = config.RespawnPatienceSeconds;
+        ImGui.SetNextItemWidth(200);
+        if (ImGui.SliderFloat("wait at an empty spot", ref patience, 0f, 60f, "%.0f seconds"))
+        {
+            config.RespawnPatienceSeconds = patience;
+            saveConfig();
+        }
+
+        var notifications = config.Notifications;
+        if (ImGui.Checkbox("announce starts and finishes", ref notifications))
+        {
+            config.Notifications = notifications;
+            saveConfig();
+        }
     }
 
     /// <summary>
