@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import sys
 from collections import defaultdict
@@ -10,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .build import EXPANSIONS, Mob, build, to_plugin_json
+from .positions import extract_positions, to_payload
 from .sources import Cache, teamcraft
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -91,6 +93,28 @@ def cmd_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_positions(args: argparse.Namespace) -> int:
+    """Emit the dense spawn positions the plugin embeds."""
+    cache = Cache(CACHE_DIR)
+    _log("loading teamcraft data")
+    positions = extract_positions(teamcraft(cache, "monsters"), teamcraft(cache, "maps"))
+
+    payload = to_payload(positions)
+    out = Path(args.out) if args.out else OUT_DIR / "positions.json.gz"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    # mtime in the gzip header would make every rebuild a different file, which
+    # turns a no-op refresh into a commit.
+    with gzip.GzipFile(out, "wb", compresslevel=9, mtime=0) as handle:
+        handle.write(payload)
+
+    total = sum(len(v) for v in positions.values())
+    _log(
+        f"wrote {out}: {len(positions)} mobs, {total} positions, "
+        f"{out.stat().st_size / 1000:.0f} kB"
+    )
+    return 0
+
+
 def cmd_coverage(args: argparse.Namespace) -> int:
     cache = Cache(CACHE_DIR)
     result = build(cache, cluster_radius=args.radius, progress=_log)
@@ -150,6 +174,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("coverage", help="report how much of the game is covered").set_defaults(
         func=cmd_coverage
     )
+    positions = sub.add_parser("positions", help="emit the spawn positions the plugin embeds")
+    positions.add_argument("--out", help="where to write the gzipped payload")
+    positions.set_defaults(func=cmd_positions)
     lookup = sub.add_parser("lookup", help="show where an item can be farmed")
     lookup.add_argument("item")
     lookup.set_defaults(func=cmd_lookup)
