@@ -78,7 +78,22 @@ public sealed class MobIndex
         // Spawn points only mean anything within one territory's projection, and
         // two territories can share coordinate values entirely.
         var grouped = new Dictionary<(uint NameId, uint Territory), List<Vector3>>();
+        var elevations = new Dictionary<(uint NameId, uint Territory), List<float>>();
         var baseIds = new Dictionary<uint, HashSet<uint>>();
+
+        void Record(uint nameId, uint territoryId, Vector3 world, float? elevation)
+        {
+            var key = (nameId, territoryId);
+            if (!grouped.TryGetValue(key, out var points))
+                grouped[key] = points = [];
+            points.Add(world);
+
+            if (elevation is not { } value)
+                return;
+            if (!elevations.TryGetValue(key, out var known))
+                elevations[key] = known = [];
+            known.Add(value);
+        }
 
         foreach (var spawn in spawns)
         {
@@ -94,15 +109,14 @@ public sealed class MobIndex
                 continue;
 
             var map = territory.Map.Value;
-            var world = new Vector3(
-                (float)MapCoordinates.ToWorld(spawn.Position.X, map.SizeFactor, map.OffsetX),
-                spawn.Position.Z,
-                (float)MapCoordinates.ToWorld(spawn.Position.Y, map.SizeFactor, map.OffsetY));
-
-            var key = (spawn.BNpcNameId, spawn.TerritoryTypeId);
-            if (!grouped.TryGetValue(key, out var points))
-                grouped[key] = points = [];
-            points.Add(world);
+            Record(
+                spawn.BNpcNameId,
+                spawn.TerritoryTypeId,
+                new Vector3(
+                    (float)MapCoordinates.ToWorld(spawn.Position.X, map.SizeFactor, map.OffsetX),
+                    0f,
+                    (float)MapCoordinates.ToWorld(spawn.Position.Y, map.SizeFactor, map.OffsetY)),
+                spawn.Position.Z);
 
             if (spawn.BNpcBaseId != 0)
             {
@@ -111,6 +125,37 @@ public sealed class MobIndex
                 set.Add(spawn.BNpcBaseId);
             }
         }
+
+        // The dense half. Keyed by map rather than territory, and carrying no
+        // elevation, so the map row supplies both.
+        var mapSheet = data.GetExcelSheet<Map>();
+        var added = 0;
+        foreach (var (nameId, points) in EmbeddedPositions.Load())
+        {
+            foreach (var point in points)
+            {
+                if (point.Length < 3)
+                    continue;
+                if (!mapSheet.TryGetRow((uint)point[0], out var map))
+                    continue;
+
+                var territoryId = map.TerritoryType.RowId;
+                if (territoryId == 0)
+                    continue;
+
+                Record(
+                    nameId,
+                    territoryId,
+                    new Vector3(
+                        (float)MapCoordinates.ToWorld(point[1], map.SizeFactor, map.OffsetX),
+                        0f,
+                        (float)MapCoordinates.ToWorld(point[2], map.SizeFactor, map.OffsetY)),
+                    null);
+                added++;
+            }
+        }
+
+        log.Information($"Spawn points: {spawns.Count} supplemental, {added} embedded.");
 
         var dropsByMob = new Dictionary<uint, HashSet<uint>>();
         var mobsByItem = new Dictionary<uint, List<uint>>();
@@ -148,8 +193,18 @@ public sealed class MobIndex
             if (!locationsByMob.TryGetValue(nameId, out var locations))
                 locationsByMob[nameId] = locations = [];
 
+            // Only one of the two sources carries elevation, so it is taken per
+            // territory rather than per cluster. It is a starting height for the
+            // navmesh floor query, not somewhere to path to.
+            var elevation = elevations.TryGetValue((nameId, territoryId), out var known) && known.Count > 0
+                ? known.Average()
+                : 0f;
+
             foreach (var spot in FarmSpots.Cluster(points, clusterRadius))
-                locations.Add(new FarmLocation(territoryId, zone, spot.Centre, spot.Count, 0));
+            {
+                var centre = spot.Centre with { Y = elevation };
+                locations.Add(new FarmLocation(territoryId, zone, centre, spot.Count, 0));
+            }
         }
 
         var byNameId = new Dictionary<uint, MobEntry>();
