@@ -1,0 +1,27 @@
+[
+  {
+    "Name": "AutoKill",
+    "Author": "d12frosted",
+    "Punchline": "Farm any mob, or anything it drops, until you have enough.",
+    "Description": "Pick a mob, or pick an item you want it to drop, and AutoKill goes and farms it. It works out where the mob lives, teleports to the zone, mounts, flies over and kills its way around the field until you have what you asked for.\n\nSearch by mob name, or by item and see which mobs drop it. Set any mix of a kill count, a time limit and an amount of any item, and choose whether the first target ends the run or all of them must be met. Dying or filling your bags always ends it, and you get a chat line and a toast when it does.\n\nIt farms a whole field rather than one point, flying a circuit around it and moving on when a spot is cleared instead of standing over a respawn timer. How quickly a place comes back is not in any dataset, so it measures that as it goes and uses it to decide when a spot is worth returning to. Finished runs are kept so repeating one is a single click.\n\nMovement needs vnavmesh. Fighting is handed to Wrath Combo, and left completely alone if your auto-rotation is already running.",
+    "InternalName": "AutoKill",
+    "RepoUrl": "https://github.com/d12frosted/autokill",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 15,
+    "Tags": [
+      "farm",
+      "farming",
+      "mob",
+      "drop",
+      "grind",
+      "automation"
+    ],
+    "AssemblyVersion": "0.0.1.0",
+    "IconUrl": "https://raw.githubusercontent.com/d12frosted/autokill/main/AutoKill/images/icon.png",
+    "DownloadLinkInstall": "https://github.com/d12frosted/autokill/releases/download/v0.0.1/AutoKill.zip",
+    "DownloadLinkUpdate": "https://github.com/d12frosted/autokill/releases/download/v0.0.1/AutoKill.zip",
+    "DownloadLinkTesting": "https://github.com/d12frosted/autokill/releases/download/v0.0.1/AutoKill.zip",
+    "IsHide": false,
+    "IsTestingExclusive": false
+  }
+]

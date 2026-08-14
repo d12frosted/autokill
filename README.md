@@ -89,6 +89,22 @@ so "until I have 30 of these" works for anything at all, as long as you pick the
 
 ## Installing
 
+AutoKill is not in Dalamud's own plugin list and will not be: that list does not
+carry plugins that play the game for you. It installs from a custom repository
+instead, which Dalamud supports directly and which handles updates for you.
+
+In Dalamud settings, under **Experimental**, add this to custom plugin repositories:
+
+```
+https://raw.githubusercontent.com/d12frosted/autokill/main/repo.json
+```
+
+Save, then find AutoKill in the plugin installer. You also need **vnavmesh**, which
+installs the same way from its own repository, and a rotation plugin if you want it to
+do the fighting.
+
+## Building it yourself
+
 Requires the .NET 10 SDK and a Dalamud dev install.
 
 ```sh
@@ -116,6 +132,10 @@ explicitly.
 ```sh
 dotnet test AutoKill.Tests/AutoKill.Tests.csproj
 ```
+
+To cut a release, `./scripts/package.sh` builds the plugin, writes `dist/AutoKill.zip`
+and regenerates `repo.json`. Attach the zip to a release tagged `v<version>` and commit
+the manifest; the two have to match or Dalamud refuses the download.
 
 ## Why things work the way they do
 
