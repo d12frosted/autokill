@@ -57,6 +57,7 @@ public sealed class FarmSession
     private static readonly TimeSpan DismountRetry = TimeSpan.FromMilliseconds(400);
     private static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan SightingInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan StuckAfter = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan JumpCooldown = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan TeleportCooldown = TimeSpan.FromSeconds(10);
 
@@ -82,6 +83,7 @@ public sealed class FarmSession
     private readonly Dictionary<uint, int> baselineCounts = [];
     private readonly Dictionary<uint, int> gained = [];
     private readonly HashSet<ulong> engaged = [];
+    private readonly Dictionary<ulong, DateTime> engagedAt = [];
 
     private DateTime lastMove = DateTime.MinValue;
     private DateTime lastMountAction = DateTime.MinValue;
@@ -92,6 +94,9 @@ public sealed class FarmSession
     private int spotIndex;
     private DateTime? emptySince;
     private ulong chosen;
+    private Vector3 lastPosition;
+    private DateTime? stuckSince;
+    private bool stuckReported;
     private DateTime lastSample = DateTime.MinValue;
     private DateTime lastSighting = DateTime.MinValue;
     private readonly Dictionary<int, DateTime> clearedAt = [];
@@ -246,6 +251,29 @@ public sealed class FarmSession
         lastSample = DateTime.UtcNow;
         var spot = resolvedSpot;
 
+        if (navmesh.Moving && Vector3.Distance(player.Position, lastPosition) < 0.5f)
+        {
+            stuckSince ??= DateTime.UtcNow;
+            if (DateTime.UtcNow - stuckSince >= StuckAfter && !stuckReported)
+            {
+                stuckReported = true;
+                recorder?.Write("stuck", new
+                {
+                    phase = Phase.ToString(),
+                    status = Status,
+                    seconds = Math.Round((DateTime.UtcNow - stuckSince.Value).TotalSeconds, 1),
+                    flying = PlayerActions.IsFlying(condition),
+                });
+            }
+        }
+        else
+        {
+            stuckSince = null;
+            stuckReported = false;
+        }
+
+        lastPosition = player.Position;
+
         if (DateTime.UtcNow - lastSighting >= SightingInterval)
         {
             lastSighting = DateTime.UtcNow;
@@ -257,7 +285,7 @@ public sealed class FarmSession
             }
         }
 
-        recorder.Write("sample", new
+        recorder?.Write("sample", new
         {
             phase = Phase.ToString(),
             status = Status,
@@ -272,6 +300,7 @@ public sealed class FarmSession
             moving = navmesh.Moving,
             kills,
             targetId = targets.Target?.GameObjectId,
+            rotating = wrath.Rotating,
             nearby = objects
                 .OfType<IBattleNpc>()
                 .Where(npc => npc.NameId == mob.BNpcNameId && !npc.IsDead && npc.CurrentHp > 0)
@@ -510,28 +539,10 @@ public sealed class FarmSession
             return;
         }
 
-        // Fly when the zone allows it, which is how anyone actually covers this
-        // sort of distance.
-        var flying = PlayerActions.IsFlying(condition);
-        if (!flying
-            && remaining > config.MountDistance
-            && PlayerActions.IsMounted(condition)
-            && PlayerActions.CanFlyIn(data, area.TerritoryTypeId))
-        {
-            // Take off deliberately rather than leaving it to the path. vnavmesh
-            // only jumps once a path climbs, and a path between two points on
-            // the ground has no reason to, so waiting for that means running the
-            // whole way with a flying mount underneath.
-            Status = "taking off";
-            if (DateTime.UtcNow - lastJump >= JumpCooldown)
-            {
-                lastJump = DateTime.UtcNow;
-                recorder?.Write("takeoff", new { remaining = Math.Round(remaining, 1) });
-                PlayerActions.Jump();
-            }
-
-            return;
-        }
+        // Ask for a route through the air whenever flight is possible and the
+        // character is mounted. vnavmesh climbs to cross ground and jumps by
+        // itself to get off it, so taking off is not ours to arrange.
+        var flying = ShouldFly();
 
         var where = area.Spots.Count > 1
             ? $"spot {spotIndex % area.Spots.Count + 1} of {area.Spots.Count}"
@@ -542,8 +553,7 @@ public sealed class FarmSession
             return;
 
         lastMove = DateTime.UtcNow;
-        if (!navmesh.MoveCloseTo(spot, ArrivalRange / 2f, flying))
-            log.Warning("vnavmesh would not path to the farm spot.");
+        Moved(navmesh.MoveCloseTo(spot, ArrivalRange / 2f, flying), spot, ArrivalRange / 2f);
     }
 
     /// <summary>
@@ -660,6 +670,7 @@ public sealed class FarmSession
 
         if (quarry is null)
         {
+            RecordRejections(player);
             TickEmptySpot(player, spot);
             return;
         }
@@ -678,7 +689,8 @@ public sealed class FarmSession
         }
 
         emptySince = null;
-        engaged.Add(quarry.GameObjectId);
+        if (engaged.Add(quarry.GameObjectId))
+            engagedAt[quarry.GameObjectId] = DateTime.UtcNow;
 
         if (chosen != quarry.GameObjectId)
         {
@@ -788,9 +800,7 @@ public sealed class FarmSession
     /// </summary>
     private void Approach(IPlayerCharacter player, Vector3 destination, float range)
     {
-        var flying = PlayerActions.IsFlying(condition);
-
-        if (!flying && !PlayerActions.IsMounted(condition))
+        if (!PlayerActions.IsFlying(condition) && !PlayerActions.IsMounted(condition))
         {
             if (PlayerActions.IsMounting(condition))
             {
@@ -808,23 +818,42 @@ public sealed class FarmSession
                 return;
             }
         }
-        else if (!flying && PlayerActions.CanFlyIn(data, area.TerritoryTypeId))
-        {
-            // Jumping does not interrupt a path, so this happens alongside the
-            // journey rather than instead of it.
-            if (DateTime.UtcNow - lastJump >= JumpCooldown)
-            {
-                lastJump = DateTime.UtcNow;
-                recorder?.Write("takeoff", new { });
-                PlayerActions.Jump();
-            }
-        }
 
         if (navmesh.Moving || navmesh.PathfindInProgress || DateTime.UtcNow - lastMove < MoveCooldown)
             return;
 
         lastMove = DateTime.UtcNow;
-        navmesh.MoveCloseTo(destination, range, flying);
+        Moved(navmesh.MoveCloseTo(destination, range, ShouldFly()), destination, range);
+    }
+
+    /// <summary>
+    /// Whether to ask for a route through the air.
+    /// </summary>
+    /// <remarks>
+    /// Already flying, or mounted somewhere flight is allowed. vnavmesh routes
+    /// over the ground rather than across it and jumps by itself to leave it, so
+    /// arranging the takeoff here is unnecessary. An earlier version did jump
+    /// deliberately, but that was written while every destination was hundreds
+    /// of yalms underground, where no route would ever climb.
+    /// </remarks>
+    private bool ShouldFly() =>
+        PlayerActions.IsFlying(condition)
+        || (PlayerActions.IsMounted(condition) && PlayerActions.CanFlyIn(data, area.TerritoryTypeId));
+
+    /// <summary>Note whether vnavmesh accepted a route, since a refusal is silent otherwise.</summary>
+    private void Moved(bool accepted, Vector3 destination, float range)
+    {
+        recorder?.Write("path", new
+        {
+            accepted,
+            fly = ShouldFly(),
+            range,
+            x = Math.Round(destination.X, 1),
+            z = Math.Round(destination.Z, 1),
+        });
+
+        if (!accepted)
+            log.Warning("vnavmesh would not path there.");
     }
 
     /// <summary>How many of the quarry are in sight, for saying so.</summary>
@@ -847,6 +876,34 @@ public sealed class FarmSession
     /// anything near the character. The second radius is what makes it possible
     /// to stop for something on the way rather than walking past it.
     /// </summary>
+    /// <summary>
+    /// Why each candidate was passed over, recorded when nothing was picked.
+    /// "It ignored one standing right there" is otherwise unanswerable, and the
+    /// reason is usually one of these rather than a fault in the search.
+    /// </summary>
+    private void RecordRejections(IPlayerCharacter player)
+    {
+        if (recorder is null)
+            return;
+
+        var rejected = objects.OfType<IBattleNpc>()
+            .Where(npc => npc.NameId == mob.BNpcNameId)
+            .Select(npc => new
+            {
+                away = Math.Round(Vector3.Distance(npc.Position, player.Position), 1),
+                why = npc.IsDead || npc.CurrentHp == 0 ? "dead"
+                    : npc.BattleNpcKind != BattleNpcSubKind.Combatant ? "not a combatant"
+                    : npc.TargetObject is not null && npc.TargetObjectId != player.GameObjectId ? "someone else's"
+                    : "out of range",
+            })
+            .OrderBy(r => r.away)
+            .Take(8)
+            .ToList();
+
+        if (rejected.Count > 0)
+            recorder.Write("nothing-picked", new { rejected });
+    }
+
     private IBattleNpc? FindQuarry(
         IPlayerCharacter player, Vector3 spot, float playerRadius, float spotRadius)
     {
@@ -902,6 +959,15 @@ public sealed class FarmSession
             engaged.Remove(id);
             kills++;
             observations.RecordKill(mob.BNpcNameId, area.TerritoryTypeId);
+
+            recorder?.Write("kill", new
+            {
+                n = kills,
+                took = engagedAt.Remove(id, out var since)
+                    ? Math.Round((DateTime.UtcNow - since).TotalSeconds, 1)
+                    : (double?)null,
+                spot = spotIndex % Math.Max(1, area.Spots.Count),
+            });
         }
     }
 
