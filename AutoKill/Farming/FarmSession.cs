@@ -59,7 +59,6 @@ public sealed class FarmSession
     private static readonly TimeSpan SightingInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan StuckAfter = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan CompanionInterval = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan JumpCooldown = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan TeleportCooldown = TimeSpan.FromSeconds(10);
 
     private readonly MobEntry mob;
@@ -88,7 +87,6 @@ public sealed class FarmSession
 
     private DateTime lastMove = DateTime.MinValue;
     private DateTime lastMountAction = DateTime.MinValue;
-    private DateTime lastJump = DateTime.MinValue;
     private bool flagged;
     private DateTime lastTeleport = DateTime.MinValue;
     private Vector3? resolvedSpot;
@@ -100,6 +98,7 @@ public sealed class FarmSession
     private bool stuckReported;
     private DateTime lastCompanionCheck = DateTime.MinValue;
     private bool companionWarned;
+    private bool lastFly;
     private DateTime lastSample = DateTime.MinValue;
     private DateTime lastSighting = DateTime.MinValue;
     private readonly Dictionary<int, DateTime> clearedAt = [];
@@ -552,11 +551,7 @@ public sealed class FarmSession
             : "the spot";
         Status = $"nothing in sight, {(flying ? "flying" : "heading")} to {where}, {remaining:F0}y";
 
-        if (navmesh.Moving || navmesh.PathfindInProgress || DateTime.UtcNow - lastMove < MoveCooldown)
-            return;
-
-        lastMove = DateTime.UtcNow;
-        Moved(navmesh.MoveCloseTo(spot, ArrivalRange / 2f, flying), spot, ArrivalRange / 2f);
+        Steer(spot, ArrivalRange / 2f);
     }
 
     /// <summary>
@@ -760,11 +755,7 @@ public sealed class FarmSession
             return;
         }
 
-        if (navmesh.Moving || navmesh.PathfindInProgress || DateTime.UtcNow - lastMove < MoveCooldown)
-            return;
-
-        lastMove = DateTime.UtcNow;
-        navmesh.MoveCloseTo(quarry.Position, EngageRange);
+        Steer(quarry.Position, EngageRange);
     }
 
     /// <summary>
@@ -824,11 +815,7 @@ public sealed class FarmSession
             }
         }
 
-        if (navmesh.Moving || navmesh.PathfindInProgress || DateTime.UtcNow - lastMove < MoveCooldown)
-            return;
-
-        lastMove = DateTime.UtcNow;
-        Moved(navmesh.MoveCloseTo(destination, range, ShouldFly()), destination, range);
+        Steer(destination, range);
     }
 
     /// <summary>
@@ -844,6 +831,41 @@ public sealed class FarmSession
     private bool ShouldFly() =>
         PlayerActions.IsFlying(condition)
         || (PlayerActions.IsMounted(condition) && PlayerActions.CanFlyIn(data, area.TerritoryTypeId));
+
+    /// <summary>
+    /// Send the character somewhere, and keep the route in step with how it is
+    /// travelling.
+    /// </summary>
+    /// <remarks>
+    /// A route carries the mode it was asked for. One begun on foot stays a
+    /// ground route however the character continues, so mounting partway leaves
+    /// it running along the ground with a flying mount underneath and no reason
+    /// to ever leave it. vnavmesh only jumps for a route that climbs, and a
+    /// ground route never does.
+    ///
+    /// So a change of mode re-issues the route rather than waiting for the
+    /// current one to finish, which is the same thing GatherBuddy Reborn does
+    /// when its mount finally arrives.
+    /// </remarks>
+    private void Steer(Vector3 destination, float range)
+    {
+        var fly = ShouldFly();
+        var modeChanged = navmesh.Moving && fly != lastFly;
+
+        if (!modeChanged
+            && (navmesh.Moving || navmesh.PathfindInProgress || DateTime.UtcNow - lastMove < MoveCooldown))
+            return;
+
+        if (modeChanged)
+        {
+            recorder?.Write("remode", new { to = fly ? "air" : "ground" });
+            navmesh.Stop();
+        }
+
+        lastMove = DateTime.UtcNow;
+        lastFly = fly;
+        Moved(navmesh.MoveCloseTo(destination, range, fly), destination, range);
+    }
 
     /// <summary>Note whether vnavmesh accepted a route, since a refusal is silent otherwise.</summary>
     private void Moved(bool accepted, Vector3 destination, float range)
