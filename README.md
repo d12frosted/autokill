@@ -38,13 +38,18 @@ dotnet build AutoKill/AutoKill.csproj -c Release
 
 Building from macOS or Linux works because the project sets `EnableWindowsTargeting`.
 
-To load the result in game, add the output directory as a dev plugin location in
-Dalamud's settings (Experimental tab). On macOS the game runs under Wine, where `/` is
-mounted as `Z:`, so the path to enter is the Windows-shaped one:
+To install it locally, quit the game and run:
 
+```sh
+./scripts/install.sh              # build Debug and register as a dev plugin
+./scripts/install.sh --status     # what is built, what is registered
+./scripts/install.sh --uninstall  # take the registration back out
 ```
-Z:\Users\<you>\Developer\autokill\AutoKill\bin\Release
-```
+
+It registers the build directory with Dalamud rather than copying anything, so after
+the first install a rebuild plus a reload from the dev plugins tab is enough. It refuses
+to run while the game is up, because Dalamud rewrites its configuration on exit and
+would throw the change away.
 
 ## Data
 
