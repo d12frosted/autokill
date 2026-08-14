@@ -61,6 +61,8 @@ public sealed class FarmSession
     private readonly ITargetManager targets;
     private readonly IDataManager data;
     private readonly ICondition condition;
+    private readonly Notifier notifier;
+    private readonly Func<uint, string> itemName;
     private readonly IPluginLog log;
 
     private readonly DateTime startedAt = DateTime.UtcNow;
@@ -88,6 +90,8 @@ public sealed class FarmSession
         ITargetManager targets,
         IDataManager data,
         ICondition condition,
+        Notifier notifier,
+        Func<uint, string> itemName,
         IPluginLog log)
     {
         this.mob = mob;
@@ -100,6 +104,8 @@ public sealed class FarmSession
         this.targets = targets;
         this.data = data;
         this.condition = condition;
+        this.notifier = notifier;
+        this.itemName = itemName;
         this.log = log;
 
         // Anything already in the bags is not something this run produced.
@@ -177,6 +183,11 @@ public sealed class FarmSession
         navmesh.Stop();
         wrath.Stop();
         log.Information($"Farming {mob.Name} stopped: {reason}");
+
+        var summary = $"{mob.Name}: {reason}. {kills} killed in {Progress.Elapsed:hh\\:mm\\:ss}";
+        foreach (var (itemId, count) in gained)
+            summary += $", {count} {itemName(itemId)}";
+        notifier.Alert(summary);
     }
 
     private void TickTeleport(IPlayerCharacter player)

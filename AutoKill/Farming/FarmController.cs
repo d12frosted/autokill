@@ -16,6 +16,8 @@ public sealed class FarmController : IDisposable
     private readonly ITargetManager targets;
     private readonly IDataManager data;
     private readonly ICondition condition;
+    private readonly Notifier notifier;
+    private readonly Func<uint, string> itemName;
     private readonly IPluginLog log;
 
     public FarmController(
@@ -27,6 +29,8 @@ public sealed class FarmController : IDisposable
         ITargetManager targets,
         IDataManager data,
         ICondition condition,
+        Notifier notifier,
+        Func<uint, string> itemName,
         IPluginLog log)
     {
         this.framework = framework;
@@ -37,6 +41,8 @@ public sealed class FarmController : IDisposable
         this.targets = targets;
         this.data = data;
         this.condition = condition;
+        this.notifier = notifier;
+        this.itemName = itemName;
         this.log = log;
 
         framework.Update += OnUpdate;
@@ -53,8 +59,9 @@ public sealed class FarmController : IDisposable
     {
         Stop("replaced");
         Current = new FarmSession(
-            mob, area, conditions, navmesh, wrath, clientState, objects, targets, data, condition, log);
+            mob, area, conditions, navmesh, wrath, clientState, objects, targets, data, condition, notifier, itemName, log);
         log.Information($"Farming {mob.Name} in {area.ZoneName}, {area.Spots.Count} spot(s).");
+        notifier.Info($"farming {mob.Name} in {area.ZoneName}.");
     }
 
     public void Stop(string reason = "stopped")
