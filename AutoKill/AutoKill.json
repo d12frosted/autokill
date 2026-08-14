@@ -1,0 +1,16 @@
+{
+  "Name": "AutoKill",
+  "Author": "d12frosted",
+  "Punchline": "Farm a mob, or an item, until you have enough.",
+  "Description": "Pick a mob (or an item you want dropped), travel to it and grind it out. Uses vnavmesh for movement, Lifestream for travel and Wrath Combo / Rotation Solver / BossMod for the actual fighting.",
+  "InternalName": "AutoKill",
+  "RepoUrl": "https://github.com/d12frosted/autokill",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 15,
+  "Tags": [
+    "farm",
+    "mob",
+    "drop",
+    "automation"
+  ]
+}
