@@ -40,7 +40,26 @@ public sealed class NavmeshIpc(IDalamudPluginInterface plugin, IPluginLog log)
     private readonly ICallGateSubscriber<object> cancelPathfinding =
         plugin.GetIpcSubscriber<object>("vnavmesh.Nav.PathfindCancelAll");
 
-    public bool Available => Try(() => isReady.InvokeFunc(), false);
+    /// <summary>
+    /// Whether vnavmesh answers at all, which is a different question from
+    /// whether it has a mesh ready: it answers false all the while it is
+    /// building one, and answers nothing when it is not there.
+    /// </summary>
+    public bool Responding
+    {
+        get
+        {
+            try
+            {
+                isReady.InvokeFunc();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+    }
 
     /// <summary>True once a mesh exists for the current zone.</summary>
     public bool Ready => Try(() => isReady.InvokeFunc(), false);

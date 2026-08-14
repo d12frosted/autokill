@@ -34,6 +34,7 @@ public sealed class FarmController : IDisposable
         IDataManager data,
         ICondition condition,
         Notifier notifier,
+        Requirements requirements,
         Func<uint, string> itemName,
         Configuration config,
         Func<RunRecorder?> newRecorder,
@@ -50,6 +51,7 @@ public sealed class FarmController : IDisposable
         this.data = data;
         this.condition = condition;
         this.notifier = notifier;
+        Requirements = requirements;
         this.itemName = itemName;
         this.config = config;
         this.newRecorder = newRecorder;
@@ -64,8 +66,9 @@ public sealed class FarmController : IDisposable
 
     public bool Running => Current is { Phase: not FarmPhase.Finished };
 
-    public string? Blocker =>
-        !navmesh.Available ? "vnavmesh is not responding, so nothing can move." : null;
+    public Requirements Requirements { get; }
+
+    public string? Blocker => Requirements.Blocker;
 
     public void Start(MobEntry mob, FarmArea area, StopConditions conditions)
     {

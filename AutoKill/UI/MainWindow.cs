@@ -419,6 +419,30 @@ public sealed class MainWindow : Window
             return;
 
         ImGui.Spacing();
+        ImGui.TextDisabled("Needs");
+
+        // Everything this leans on is somebody else's plugin, found at runtime.
+        // A missing one produces silence rather than an error, so the state of
+        // each is worth showing whether or not anything is wrong.
+        foreach (var requirement in farming.Requirements.All())
+        {
+            var (mark, colour) = requirement.State switch
+            {
+                RequirementState.Good => ("ok", new Vector4(0.56f, 0.75f, 0.47f, 1f)),
+                RequirementState.Blocking => ("!!", new Vector4(0.84f, 0.41f, 0.33f, 1f)),
+                _ => ("--", new Vector4(0.6f, 0.6f, 0.6f, 1f)),
+            };
+
+            ImGui.TextColored(colour, mark);
+            ImGui.SameLine();
+            ImGui.TextUnformatted(requirement.Name);
+            ImGui.SameLine();
+            ImGui.TextDisabled(requirement.Detail);
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
 
         var mountDistance = config.MountDistance;
         ImGui.SetNextItemWidth(220);

@@ -52,8 +52,9 @@ public sealed class Plugin : IDalamudPlugin
         var navmesh = new NavmeshIpc(PluginInterface, Log);
         notifier = new Notifier(ChatGui, Toast) { Enabled = config.Notifications };
         wrath = new WrathIpc(PluginInterface, Log);
+        var requirements = new Requirements(PluginInterface, navmesh, wrath);
         farming = new FarmController(
-            Framework, navmesh, wrath, ClientState, Objects, Targets, DataManager, Condition, notifier,
+            Framework, navmesh, wrath, ClientState, Objects, Targets, DataManager, Condition, notifier, requirements,
             itemId => index?.ItemName(itemId) ?? $"item {itemId}", config, NewRecorder, observations, history, Log);
 
         mainWindow = new MainWindow(() => index, farming, Textures, config, observations, history, Save);
