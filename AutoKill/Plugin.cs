@@ -1,4 +1,6 @@
 using AutoKill.Data;
+using AutoKill.Farming;
+using AutoKill.IPC;
 using AutoKill.UI;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
@@ -17,15 +19,26 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
+    [PluginService] internal static IFramework Framework { get; private set; } = null!;
+    [PluginService] internal static IClientState ClientState { get; private set; } = null!;
+    [PluginService] internal static IObjectTable Objects { get; private set; } = null!;
+    [PluginService] internal static ITargetManager Targets { get; private set; } = null!;
 
     private readonly WindowSystem windows = new("AutoKill");
     private readonly MainWindow mainWindow;
+    private readonly WrathIpc wrath;
+    private readonly FarmController farming;
 
     private MobIndex? index;
 
     public Plugin()
     {
-        mainWindow = new MainWindow(() => index);
+        var navmesh = new NavmeshIpc(PluginInterface);
+        wrath = new WrathIpc(PluginInterface, Log);
+        farming = new FarmController(
+            Framework, navmesh, wrath, ClientState, Objects, Targets, DataManager, Log);
+
+        mainWindow = new MainWindow(() => index, farming);
         windows.AddWindow(mainWindow);
 
         PluginInterface.UiBuilder.Draw += windows.Draw;
@@ -54,6 +67,8 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        farming.Dispose();
+        wrath.Dispose();
         CommandManager.RemoveHandler(CommandName);
         PluginInterface.UiBuilder.Draw -= windows.Draw;
         PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;
