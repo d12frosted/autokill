@@ -49,6 +49,10 @@ public sealed class Plugin : IDalamudPlugin
         history = new RunHistory(
             Path.Combine(PluginInterface.ConfigDirectory.FullName, "history.json"), Log);
 
+        // Beside this plugin's own configuration file, where every plugin's is.
+        var artisan = new ArtisanLists(
+            Path.Combine(PluginInterface.ConfigFile.Directory!.FullName, "Artisan.json"), DataManager, Log);
+
         var navmesh = new NavmeshIpc(PluginInterface, Log);
         notifier = new Notifier(ChatGui, Toast) { Enabled = config.Notifications };
         wrath = new WrathIpc(PluginInterface, Log);
@@ -57,7 +61,8 @@ public sealed class Plugin : IDalamudPlugin
             Framework, navmesh, wrath, ClientState, Objects, Targets, DataManager, Condition, notifier, requirements,
             itemId => index?.ItemName(itemId) ?? $"item {itemId}", config, NewRecorder, observations, history, Log);
 
-        mainWindow = new MainWindow(() => index, farming, Textures, config, observations, history, Save);
+        mainWindow = new MainWindow(
+            () => index, farming, Textures, config, observations, history, artisan, Save);
         windows.AddWindow(mainWindow);
 
         PluginInterface.UiBuilder.Draw += windows.Draw;

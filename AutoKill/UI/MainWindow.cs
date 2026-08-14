@@ -31,13 +31,18 @@ public sealed class MainWindow : Window
     private readonly Configuration config;
     private readonly Observations observations;
     private readonly RunHistory history;
+    private readonly ArtisanLists artisan;
     private readonly Action saveConfig;
 
     private string mobQuery = string.Empty;
     private string itemQuery = string.Empty;
     private uint selectedItem;
     private string selectedItemName = string.Empty;
+    private int selectedItemWanted = 1;
     private MobEntry? selectedMob;
+
+    private CraftingList? craftingList;
+    private IReadOnlyList<ListMaterial> craftingMaterials = [];
 
     private MobEntry? plannedMob;
     private FarmArea? plannedArea;
@@ -54,6 +59,7 @@ public sealed class MainWindow : Window
         Configuration config,
         Observations observations,
         RunHistory history,
+        ArtisanLists artisan,
         Action saveConfig)
         : base("AutoKill###AutoKillMain")
     {
@@ -63,6 +69,7 @@ public sealed class MainWindow : Window
         this.config = config;
         this.observations = observations;
         this.history = history;
+        this.artisan = artisan;
         this.saveConfig = saveConfig;
         SizeConstraints = new WindowSizeConstraints
         {
@@ -518,9 +525,10 @@ public sealed class MainWindow : Window
     /// Falls through silently when there is no icon, since a missing picture is
     /// not worth a gap in the row.
     /// </summary>
-    private void DrawItemIcon(MobIndex mobs, uint itemId)
+    private void DrawItemIcon(MobIndex mobs, uint itemId) => DrawIcon(mobs.ItemIcon(itemId));
+
+    private void DrawIcon(ushort icon)
     {
-        var icon = mobs.ItemIcon(itemId);
         if (icon == 0)
             return;
 
@@ -539,9 +547,10 @@ public sealed class MainWindow : Window
         itemGoals.Clear();
 
         // Arriving from an item search means the item is already known, so do
-        // not make it be picked out of the list a second time.
+        // not make it be picked out of the list a second time. How much is
+        // wanted comes with it, which is the whole use of a crafting list.
         if (selectedItem != 0 && mob.Drops.Contains(selectedItem))
-            itemGoals[selectedItem] = 1;
+            itemGoals[selectedItem] = Math.Max(1, selectedItemWanted);
     }
 
     private void ClearPlan()
@@ -600,8 +609,14 @@ public sealed class MainWindow : Window
         if (!tab)
             return;
 
-        ImGui.SetNextItemWidth(-1);
-        ImGui.InputTextWithHint("##item-query", "item name", ref itemQuery, 64);
+        artisan.Refresh();
+        DrawCraftingListPicker();
+
+        if (craftingList is null)
+        {
+            ImGui.SetNextItemWidth(-1);
+            ImGui.InputTextWithHint("##item-query", "item name", ref itemQuery, 64);
+        }
 
         using var child = ImRaii.Child("##item-results", new Vector2(-1, -1));
         if (!child)
@@ -609,13 +624,18 @@ public sealed class MainWindow : Window
 
         if (selectedItem == 0)
         {
+            if (craftingList is not null)
+            {
+                DrawCraftingMaterials(mobs);
+                return;
+            }
+
             foreach (var (itemId, name) in mobs.SearchItems(itemQuery))
             {
                 DrawItemIcon(mobs, itemId);
                 if (!ImGui.Selectable($"{name}##item{itemId}"))
                     continue;
-                selectedItem = itemId;
-                selectedItemName = name;
+                Want(itemId, name, 1);
             }
 
             return;
@@ -630,6 +650,12 @@ public sealed class MainWindow : Window
         ImGui.SameLine();
         DrawItemIcon(mobs, selectedItem);
         ImGui.TextUnformatted(selectedItemName);
+        if (selectedItemWanted > 1)
+        {
+            ImGui.SameLine();
+            ImGui.TextDisabled($"({selectedItemWanted} wanted)");
+        }
+
         ImGui.Separator();
 
         var droppers = mobs.MobsDropping(selectedItem);
@@ -644,6 +670,112 @@ public sealed class MainWindow : Window
             ImGui.TextUnformatted(mob.Name);
             DrawMobDetail(mob);
         }
+    }
+
+    /// <summary>
+    /// Pick a crafting list instead of searching, when there are any.
+    /// </summary>
+    /// <remarks>
+    /// A crafting list already says what has to be found and how much of it, so
+    /// re-entering both by hand is work someone has already done. The lists come
+    /// from Artisan, which is where they are kept.
+    /// </remarks>
+    private void DrawCraftingListPicker()
+    {
+        if (!artisan.Installed || artisan.Lists.Count == 0)
+            return;
+
+        var lists = artisan.Lists;
+
+        // Lists are re-read whenever Artisan saves them, so the one being shown
+        // has to be found again each time rather than held on to. Editing a list
+        // in the other window changes what is needed here without throwing away
+        // whatever is being looked at.
+        if (craftingList is not null)
+        {
+            var fresh = lists.FirstOrDefault(list => list.Id == craftingList.Id);
+            if (fresh is null)
+                ChooseCraftingList(null);
+            else if (!ReferenceEquals(fresh, craftingList))
+                Reread(fresh);
+        }
+
+        var current = craftingList is null ? 0 : lists.ToList().IndexOf(craftingList) + 1;
+        var labels = "search for an item\0" + string.Join('\0', lists.Select(list => list.Name)) + "\0";
+
+        ImGui.SetNextItemWidth(-1);
+        if (ImGui.Combo("##artisan-list", ref current, labels))
+            ChooseCraftingList(current == 0 ? null : lists[current - 1]);
+    }
+
+    private void ChooseCraftingList(CraftingList? list)
+    {
+        Reread(list);
+        selectedItem = 0;
+    }
+
+    private void Reread(CraftingList? list)
+    {
+        craftingList = list;
+        craftingMaterials = list is null ? [] : artisan.Materials(list);
+    }
+
+    /// <summary>
+    /// What a crafting list needs and a mob can supply, with how much of it is
+    /// still to find.
+    /// </summary>
+    /// <remarks>
+    /// Only the materials something drops are offered, since the rest are not
+    /// this plugin's business, but how many were left out is worth saying: a
+    /// list showing two rows out of thirty otherwise reads as broken.
+    /// </remarks>
+    private void DrawCraftingMaterials(MobIndex mobs)
+    {
+        var farmable = craftingMaterials
+            .Where(material => mobs.MobsDropping(material.ItemId).Count > 0)
+            .ToList();
+
+        var rest = craftingMaterials.Count - farmable.Count;
+
+        if (farmable.Count == 0)
+        {
+            ImGui.Spacing();
+            ImGui.TextDisabled("Nothing on this list is dropped by a mob.");
+            if (rest > 0)
+                ImGui.TextDisabled($"Its {rest} material(s) are gathered, bought or crafted.");
+            return;
+        }
+
+        foreach (var material in farmable)
+        {
+            using var id = ImRaii.PushId((int)material.ItemId);
+
+            var held = Bags.CountOf(material.ItemId);
+            var missing = CraftingLists.StillNeeded(material.Required, held);
+
+            DrawIcon(material.Icon);
+            if (ImGui.Selectable($"{material.Name}##material"))
+                Want(material.ItemId, material.Name, Math.Max(1, missing));
+
+            ImGui.SameLine();
+            ImGui.TextDisabled(missing == 0
+                ? $"{held}/{material.Required}, enough already"
+                : $"{held}/{material.Required}, {missing} to go");
+        }
+
+        if (rest > 0)
+        {
+            ImGui.Spacing();
+            ImGui.TextDisabled($"{rest} other material(s) are gathered, bought or crafted.");
+        }
+    }
+
+    /// <summary>Choose an item to go looking for, and how much of it.</summary>
+    private void Want(uint itemId, string name, int quantity)
+    {
+        selectedItem = itemId;
+        selectedItemName = name;
+        selectedItemWanted = quantity;
     }
 
     private void DrawMobDetail(MobEntry mob)
