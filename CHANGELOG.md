@@ -3,7 +3,7 @@
 What changed in each release, written for people using the plugin rather than
 reading the diff. Dates are when the tag went out.
 
-## Unreleased
+## 0.0.3 - 2026-08-14
 
 ### Added
 
