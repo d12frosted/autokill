@@ -35,7 +35,11 @@ public sealed class FarmSession
     private const float EngageRange = 3f;
     private const float HuntRadius = 90f;
 
+    // Below this a mount costs more time to summon than it saves.
+    private const float MountDistance = 60f;
+
     private static readonly TimeSpan MoveCooldown = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan MountCooldown = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan TeleportCooldown = TimeSpan.FromSeconds(10);
 
     private readonly MobEntry mob;
@@ -47,6 +51,7 @@ public sealed class FarmSession
     private readonly IObjectTable objects;
     private readonly ITargetManager targets;
     private readonly IDataManager data;
+    private readonly ICondition condition;
     private readonly IPluginLog log;
 
     private readonly DateTime startedAt = DateTime.UtcNow;
@@ -55,6 +60,8 @@ public sealed class FarmSession
     private readonly HashSet<ulong> engaged = [];
 
     private DateTime lastMove = DateTime.MinValue;
+    private DateTime lastMount = DateTime.MinValue;
+    private bool flagged;
     private DateTime lastTeleport = DateTime.MinValue;
     private Vector3? resolvedSpot;
     private int kills;
@@ -69,6 +76,7 @@ public sealed class FarmSession
         IObjectTable objects,
         ITargetManager targets,
         IDataManager data,
+        ICondition condition,
         IPluginLog log)
     {
         this.mob = mob;
@@ -80,6 +88,7 @@ public sealed class FarmSession
         this.objects = objects;
         this.targets = targets;
         this.data = data;
+        this.condition = condition;
         this.log = log;
 
         // Anything already in the bags is not something this run produced.
@@ -207,14 +216,45 @@ public sealed class FarmSession
         }
 
         var spot = ResolveSpot();
-        if (Vector3.Distance(player.Position, spot) <= ArrivalRange)
+
+        // Put the destination on the map once the spot is resolved, so where
+        // the character is heading is visible rather than a mystery.
+        if (!flagged)
+        {
+            PlayerActions.FlagDestination(data, location.TerritoryTypeId, spot);
+            flagged = true;
+        }
+
+        var remaining = Vector3.Distance(player.Position, spot);
+        if (remaining <= ArrivalRange)
         {
             navmesh.Stop();
             Phase = FarmPhase.Hunting;
             return;
         }
 
-        Status = $"travelling to {location.ZoneName}";
+        // Mounting is worth a couple of seconds over any real distance, but
+        // summoning is interrupted by movement, so stop first and wait it out.
+        if (remaining > MountDistance && !PlayerActions.IsMounted(condition))
+        {
+            if (PlayerActions.IsMounting(condition))
+            {
+                Status = "mounting";
+                return;
+            }
+
+            if (PlayerActions.CanMount(condition) && DateTime.UtcNow - lastMount >= MountCooldown)
+            {
+                lastMount = DateTime.UtcNow;
+                if (navmesh.Moving)
+                    navmesh.Stop();
+                Status = "mounting";
+                PlayerActions.Mount();
+                return;
+            }
+        }
+
+        Status = $"travelling to {location.ZoneName} ({remaining:F0}y)";
         if (navmesh.Moving || navmesh.PathfindInProgress || DateTime.UtcNow - lastMove < MoveCooldown)
             return;
 

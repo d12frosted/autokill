@@ -23,6 +23,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
     [PluginService] internal static IObjectTable Objects { get; private set; } = null!;
     [PluginService] internal static ITargetManager Targets { get; private set; } = null!;
+    [PluginService] internal static ICondition Condition { get; private set; } = null!;
 
     private readonly WindowSystem windows = new("AutoKill");
     private readonly MainWindow mainWindow;
@@ -36,7 +37,7 @@ public sealed class Plugin : IDalamudPlugin
         var navmesh = new NavmeshIpc(PluginInterface);
         wrath = new WrathIpc(PluginInterface, Log);
         farming = new FarmController(
-            Framework, navmesh, wrath, ClientState, Objects, Targets, DataManager, Log);
+            Framework, navmesh, wrath, ClientState, Objects, Targets, DataManager, Condition, Log);
 
         mainWindow = new MainWindow(() => index, farming);
         windows.AddWindow(mainWindow);
