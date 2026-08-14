@@ -285,9 +285,15 @@ public sealed class FarmSession
             }
         }
 
-        // Already in the air: fly the rest of the way rather than refusing to
-        // path, and let the descent to a ground level spot do the landing.
-        var flying = PlayerActions.IsFlying(condition);
+        // Fly when the zone allows it, which is how anyone actually covers this
+        // sort of distance. Getting off the ground is vnavmesh's job: it jumps
+        // by itself once the path climbs and the character is mounted, so all
+        // that is needed here is asking for a path through the air.
+        var flying = PlayerActions.IsFlying(condition)
+                     || (remaining > MountDistance
+                         && PlayerActions.IsMounted(condition)
+                         && PlayerActions.CanFlyIn(data, area.TerritoryTypeId));
+
         // Walking through something we came here to kill and then walking back
         // to it is daft. Flying past is left alone: landing early costs more
         // than the detour saves.

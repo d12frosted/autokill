@@ -2,6 +2,7 @@ using System.Numerics;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Lumina.Excel.Sheets;
 
@@ -59,6 +60,29 @@ public static class PlayerActions
     {
         var manager = ActionManager.Instance();
         return manager != null && manager->UseAction(ActionType.GeneralAction, DismountAction);
+    }
+
+    /// <summary>
+    /// Whether this zone can be flown in yet.
+    /// </summary>
+    /// <remarks>
+    /// A zone with no aether current set cannot be flown in by anyone, and one
+    /// whose currents are unfinished cannot be flown in by this character.
+    /// Taking off is left to vnavmesh, which jumps on its own once the path
+    /// climbs and the character is mounted, so the only thing worth knowing
+    /// here is whether to ask for a path through the air at all.
+    /// </remarks>
+    public static unsafe bool CanFlyIn(IDataManager data, uint territoryTypeId)
+    {
+        if (!data.GetExcelSheet<TerritoryType>().TryGetRow(territoryTypeId, out var territory))
+            return false;
+
+        var flagSet = territory.AetherCurrentCompFlgSet.RowId;
+        if (flagSet == 0)
+            return false;
+
+        var state = PlayerState.Instance();
+        return state != null && state->IsAetherCurrentZoneComplete(flagSet);
     }
 
     /// <summary>
