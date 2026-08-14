@@ -155,7 +155,10 @@ public sealed class FarmSession
         if (conditions.ShouldStop(progress))
         {
             var met = conditions.Met(progress);
-            Finish(met.Count > 0 ? string.Join(", ", met.Select(c => Describe(c, progress))) : "done");
+            Finish(
+                met.Count > 0 ? string.Join(", ", met.Select(c => Describe(c, progress))) : "done",
+                met,
+                progress);
             return;
         }
 
@@ -173,7 +176,9 @@ public sealed class FarmSession
         }
     }
 
-    public void Finish(string reason)
+    public void Finish(string reason) => Finish(reason, [], Progress);
+
+    public void Finish(string reason, IReadOnlyList<IStopCondition> met, FarmProgress progress)
     {
         if (Phase == FarmPhase.Finished)
             return;
@@ -184,21 +189,58 @@ public sealed class FarmSession
         wrath.Stop();
         log.Information($"Farming {mob.Name} stopped: {reason}");
 
-        Announce(reason);
+        Announce(reason, met, progress);
     }
 
     /// <summary>
     /// Say what happened, with the items as chat links rather than numbers, so
     /// they can be hovered like any other item in the log.
     /// </summary>
-    private void Announce(string reason)
+    private void Announce(string reason, IReadOnlyList<IStopCondition> met, FarmProgress progress)
     {
-        var elapsed = Progress.Elapsed;
-        var head = $"{mob.Name}: {reason}. {kills} killed in {elapsed:hh\\:mm\\:ss}";
+        var chat = new SeStringBuilder().AddText($"{mob.Name}: ");
+        var plain = $"{mob.Name}: ";
 
-        var chat = new SeStringBuilder().AddText(head);
-        var plain = head;
-        foreach (var (itemId, count) in gained)
+        // Whatever ended the run, said once. Items in it are linked where they
+        // stand, so there is no need to repeat them in a tally afterwards.
+        var named = new HashSet<uint>();
+        if (met.Count == 0)
+        {
+            chat.AddText(reason);
+            plain += reason;
+        }
+        else
+        {
+            for (var i = 0; i < met.Count; i++)
+            {
+                if (i > 0)
+                {
+                    chat.AddText(", ");
+                    plain += ", ";
+                }
+
+                if (met[i] is ItemCountCondition item)
+                {
+                    named.Add(item.ItemId);
+                    chat.AddItemLink(item.ItemId, false, itemName(item.ItemId));
+                    chat.AddText($" {progress.CountOf(item.ItemId)}/{item.Target}");
+                    plain += $"{itemName(item.ItemId)} {progress.CountOf(item.ItemId)}/{item.Target}";
+                }
+                else
+                {
+                    chat.AddText(met[i].Describe(progress));
+                    plain += met[i].Describe(progress);
+                }
+            }
+        }
+
+        var tail = $". {kills} killed in {progress.Elapsed:hh\\:mm\\:ss}";
+        chat.AddText(tail);
+        plain += tail;
+
+        // Anything else that dropped along the way, which the reason had no
+        // cause to mention.
+        foreach (var (itemId, count) in gained.Where(g => !named.Contains(g.Key)))
         {
             chat.AddText($", {count} ");
             chat.AddItemLink(itemId, false, itemName(itemId));
