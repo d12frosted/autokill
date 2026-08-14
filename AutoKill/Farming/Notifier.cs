@@ -1,3 +1,4 @@
+using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Plugin.Services;
 
 namespace AutoKill.Farming;
@@ -31,5 +32,19 @@ public sealed class Notifier(IChatGui chat, IToastGui toast)
 
         chat.Print(Prefix + message);
         toast.ShowNormal(message);
+    }
+
+    /// <summary>
+    /// The same, with a chat line that can carry item links. Toasts are plain
+    /// text and cannot, so the two are written separately rather than one being
+    /// flattened into the other.
+    /// </summary>
+    public void Alert(SeString chatMessage, string toastMessage)
+    {
+        if (!Enabled)
+            return;
+
+        chat.Print(new SeStringBuilder().AddText(Prefix).Append(chatMessage).Build());
+        toast.ShowNormal(toastMessage);
     }
 }

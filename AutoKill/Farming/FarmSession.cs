@@ -3,6 +3,7 @@ using AutoKill.Core;
 using AutoKill.Data;
 using AutoKill.IPC;
 using Dalamud.Game.ClientState.Objects.Enums;
+using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
@@ -154,7 +155,7 @@ public sealed class FarmSession
         if (conditions.ShouldStop(progress))
         {
             var met = conditions.Met(progress);
-            Finish(met.Count > 0 ? string.Join(", ", met.Select(c => c.Describe(progress))) : "done");
+            Finish(met.Count > 0 ? string.Join(", ", met.Select(c => Describe(c, progress))) : "done");
             return;
         }
 
@@ -183,11 +184,38 @@ public sealed class FarmSession
         wrath.Stop();
         log.Information($"Farming {mob.Name} stopped: {reason}");
 
-        var summary = $"{mob.Name}: {reason}. {kills} killed in {Progress.Elapsed:hh\\:mm\\:ss}";
-        foreach (var (itemId, count) in gained)
-            summary += $", {count} {itemName(itemId)}";
-        notifier.Alert(summary);
+        Announce(reason);
     }
+
+    /// <summary>
+    /// Say what happened, with the items as chat links rather than numbers, so
+    /// they can be hovered like any other item in the log.
+    /// </summary>
+    private void Announce(string reason)
+    {
+        var elapsed = Progress.Elapsed;
+        var head = $"{mob.Name}: {reason}. {kills} killed in {elapsed:hh\\:mm\\:ss}";
+
+        var chat = new SeStringBuilder().AddText(head);
+        var plain = head;
+        foreach (var (itemId, count) in gained)
+        {
+            chat.AddText($", {count} ");
+            chat.AddItemLink(itemId, false, itemName(itemId));
+            plain += $", {count} {itemName(itemId)}";
+        }
+
+        notifier.Alert(chat.Build(), plain);
+    }
+
+    /// <summary>
+    /// A condition in words. Item conditions get the item's name, since the
+    /// condition itself only knows the id and an id tells a reader nothing.
+    /// </summary>
+    private string Describe(IStopCondition stop, FarmProgress progress) =>
+        stop is ItemCountCondition item
+            ? $"{itemName(item.ItemId)} {progress.CountOf(item.ItemId)}/{item.Target}"
+            : stop.Describe(progress);
 
     private void TickTeleport(IPlayerCharacter player)
     {
