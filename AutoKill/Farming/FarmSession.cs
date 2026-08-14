@@ -225,7 +225,13 @@ public sealed class FarmSession
             flagged = true;
         }
 
-        var remaining = Vector3.Distance(player.Position, spot);
+        // Altitude is not distance left to travel when the way down is a
+        // dismount, so arriving from the air is judged on the ground plane and
+        // the landing is left to the hunt.
+        var remaining = PlayerActions.IsFlying(condition)
+            ? Horizontally(player.Position, spot)
+            : Vector3.Distance(player.Position, spot);
+
         if (remaining <= ArrivalRange)
         {
             navmesh.Stop();
@@ -277,20 +283,35 @@ public sealed class FarmSession
             return;
         }
 
-        var spotForLanding = ResolveSpot();
-
-        // Dismounting in the air means falling out of the sky, possibly into
-        // somewhere with no path back. Fly down to the spot first and dismount
-        // once there is ground underfoot.
+        // Coming in on a flying mount. Get over the spot first, then dismount,
+        // which is what actually puts the character on the ground: pathing
+        // towards a floor point only ever hovers above it.
         if (PlayerActions.IsFlying(condition))
         {
-            Status = "landing";
-            if (!navmesh.Moving
-                && !navmesh.PathfindInProgress
-                && DateTime.UtcNow - lastMove >= MoveCooldown)
+            var spotForLanding = ResolveSpot();
+            var overhead = Horizontally(player.Position, spotForLanding);
+
+            if (overhead > ArrivalRange)
             {
-                lastMove = DateTime.UtcNow;
-                navmesh.MoveCloseTo(spotForLanding, ArrivalRange / 2f, true);
+                Status = $"flying in ({overhead:F0}y)";
+                if (!navmesh.Moving
+                    && !navmesh.PathfindInProgress
+                    && DateTime.UtcNow - lastMove >= MoveCooldown)
+                {
+                    lastMove = DateTime.UtcNow;
+                    navmesh.MoveCloseTo(spotForLanding, ArrivalRange / 2f, true);
+                }
+
+                return;
+            }
+
+            Status = "landing";
+            if (navmesh.Moving)
+                navmesh.Stop();
+            if (DateTime.UtcNow - lastMountAction >= MountCooldown)
+            {
+                lastMountAction = DateTime.UtcNow;
+                PlayerActions.Dismount();
             }
 
             return;
@@ -374,6 +395,13 @@ public sealed class FarmSession
         resolvedSpot = floor ?? location.Position;
         return resolvedSpot.Value;
     }
+
+    /// <summary>
+    /// Distance ignoring height. Altitude says nothing about whether the right
+    /// place has been reached when the way down is a dismount.
+    /// </summary>
+    private static float Horizontally(Vector3 a, Vector3 b) =>
+        Vector2.Distance(new Vector2(a.X, a.Z), new Vector2(b.X, b.Z));
 
     private IBattleNpc? NearestQuarry(IPlayerCharacter player, Vector3 spot)
     {
