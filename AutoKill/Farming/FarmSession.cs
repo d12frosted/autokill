@@ -703,15 +703,30 @@ public sealed class FarmSession
             });
         }
 
-        var distance = Vector3.Distance(player.Position, quarry.Position);
+        // Measured on the ground plane while flying, since altitude is not
+        // distance to something standing below.
+        var distance = PlayerActions.IsFlying(condition)
+            ? Horizontally(player.Position, quarry.Position)
+            : Vector3.Distance(player.Position, quarry.Position);
 
-        // Far enough to be worth riding to. Staying in the saddle between kills
-        // is the whole point: dismounting on arrival and walking to everything
-        // afterwards was costing minutes per run.
-        if (distance > config.MountDistance)
+        // Not yet within reach. Ride if it is worth riding, walk if it is not.
+        //
+        // The threshold is what this job can attack from, not what is worth
+        // mounting for. Routing to within attack range and then judging arrival
+        // by the mounting distance meant a ranged job stopped exactly where it
+        // had been told to and then decided it was still too far, forever.
+        if (distance > EngageRange)
         {
             Status = $"going to a {mob.Name}, {distance:F0}y away";
-            Approach(player, quarry.Position, EngageRange);
+
+            // Stop a little inside reach so arriving is unambiguous rather than
+            // a question of rounding.
+            var closeTo = EngageRange * 0.8f;
+            if (distance > config.MountDistance)
+                Approach(player, quarry.Position, closeTo);
+            else
+                Steer(quarry.Position, closeTo);
+
             return;
         }
 
@@ -748,14 +763,10 @@ public sealed class FarmSession
 
         Status = $"killing a {mob.Name}, {Nearby(player)} in sight";
 
-        if (distance <= EngageRange)
-        {
-            if (navmesh.Moving)
-                navmesh.Stop();
-            return;
-        }
-
-        Steer(quarry.Position, EngageRange);
+        // Within reach by the time we get here, so stand still and let the
+        // rotation work rather than shuffling closer.
+        if (navmesh.Moving)
+            navmesh.Stop();
     }
 
     /// <summary>
