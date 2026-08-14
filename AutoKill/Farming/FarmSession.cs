@@ -35,6 +35,12 @@ public sealed class FarmSession
     private const float EngageRange = 3f;
     private const float HuntRadius = 90f;
 
+    // Close enough to be worth stopping for on the way past.
+    private const float DivertRadius = 35f;
+
+    // How far a fight may wander from the spot before it stops counting.
+    private const float LeashRadius = 45f;
+
     // Below this a mount costs more time to summon than it saves.
     private const float MountDistance = 60f;
 
@@ -271,6 +277,16 @@ public sealed class FarmSession
         // Already in the air: fly the rest of the way rather than refusing to
         // path, and let the descent to a ground level spot do the landing.
         var flying = PlayerActions.IsFlying(condition);
+        // Walking through something we came here to kill and then walking back
+        // to it is daft. Flying past is left alone: landing early costs more
+        // than the detour saves.
+        if (!flying && FindQuarry(player, spot, DivertRadius, 0f) is not null)
+        {
+            navmesh.Stop();
+            Phase = FarmPhase.Hunting;
+            return;
+        }
+
         Status = flying
             ? $"flying to {area.ZoneName} ({remaining:F0}y)"
             : $"travelling to {area.ZoneName} ({remaining:F0}y)";
@@ -351,7 +367,7 @@ public sealed class FarmSession
             Status = "no rotation backend, fighting is up to you";
 
         var spot = ResolveSpot();
-        var quarry = NearestQuarry(player, spot);
+        var quarry = FindQuarry(player, spot, LeashRadius, HuntRadius);
 
         if (quarry is null)
         {
@@ -362,6 +378,16 @@ public sealed class FarmSession
             // time it comes back here this knot has repopulated.
             if (DateTime.UtcNow - emptySince >= RespawnPatience)
             {
+                // Diverting to something on the way leaves the spot unreached,
+                // and the circuit should not skip it just because the detour
+                // came up empty.
+                if (Vector3.Distance(player.Position, spot) > ArrivalRange)
+                {
+                    emptySince = null;
+                    Phase = FarmPhase.Travelling;
+                    return;
+                }
+
                 AdvanceSpot();
                 return;
             }
@@ -449,7 +475,13 @@ public sealed class FarmSession
     private static float Horizontally(Vector3 a, Vector3 b) =>
         Vector2.Distance(new Vector2(a.X, a.Z), new Vector2(b.X, b.Z));
 
-    private IBattleNpc? NearestQuarry(IPlayerCharacter player, Vector3 spot)
+    /// <summary>
+    /// The nearest worthwhile target, counting anything near the spot as well as
+    /// anything near the character. The second radius is what makes it possible
+    /// to stop for something on the way rather than walking past it.
+    /// </summary>
+    private IBattleNpc? FindQuarry(
+        IPlayerCharacter player, Vector3 spot, float playerRadius, float spotRadius)
     {
         IBattleNpc? best = null;
         var bestDistance = float.MaxValue;
@@ -467,7 +499,9 @@ public sealed class FarmSession
             // Someone else's fight is not ours to steal.
             if (npc.TargetObject is not null && npc.TargetObjectId != player.GameObjectId)
                 continue;
-            if (Vector3.Distance(npc.Position, spot) > HuntRadius)
+            var fromSpot = Vector3.Distance(npc.Position, spot);
+            var fromPlayer = Vector3.Distance(npc.Position, player.Position);
+            if (fromSpot > spotRadius && fromPlayer > playerRadius)
                 continue;
 
             var distance = Vector3.Distance(npc.Position, player.Position);
