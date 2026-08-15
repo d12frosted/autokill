@@ -10,92 +10,180 @@ namespace AutoKill.IPC;
 /// with it on has their own settings, and quietly reaching in to change them and
 /// then switching it off at the end of a run is not a favour.
 ///
+/// Otherwise a lease is taken, which is Wrath's own mechanism for lending a
+/// plugin control: everything set under a lease is put back when the lease ends,
+/// so nothing here is a lasting change to somebody's configuration. That is what
+/// makes it fair to set up a job that was never configured for auto-rotation.
+///
 /// Every set call answers with a result rather than throwing, and a refusal is
 /// ordinary: the lease can be invalid, blacklisted, or the player simply not
 /// ready. Those are reported and worked around, not treated as failures of the
 /// farming loop.
 /// </remarks>
-public sealed class WrathIpc(IDalamudPluginInterface plugin, IPluginLog log)
+public sealed class WrathIpc : IDisposable
 {
     // Wrath's SetResult. Everything from ten up is a refusal.
     private const int Okay = 0;
     private const int OkayWorking = 1;
     private const int InvalidLease = 11;
 
-    // Wrath's AutoRotationConfigOption.
+    // Wrath's AutoRotationConfigOption. These are assigned numbers rather than
+    // positions, so they stay put as the list grows.
     private const int InCombatOnly = 0;
     private const int OnlyAttackInCombat = 13;
+    private const int DpsAlwaysHardTarget = 19;
+    private const int HealerAlwaysHardTarget = 20;
 
-    private readonly ICallGateSubscriber<string, string, string?, Guid?> register =
-        plugin.GetIpcSubscriber<string, string, string?, Guid?>("WrathCombo.RegisterForLeaseWithCallback");
+    // Wrath's CancellationReason.
+    private const int UserRevokedIt = 0;
 
-    private readonly ICallGateSubscriber<bool> getAutoRotationState =
-        plugin.GetIpcSubscriber<bool>("WrathCombo.GetAutoRotationState");
+    /// <summary>
+    /// How often it is worth asking again after Wrath says no. Fighting is
+    /// checked on every tick, and hammering a refusal sixty times a second helps
+    /// nobody.
+    /// </summary>
+    private static readonly TimeSpan RetryEvery = TimeSpan.FromSeconds(5);
 
-    private readonly ICallGateSubscriber<Guid, bool, int> setAutoRotationState =
-        plugin.GetIpcSubscriber<Guid, bool, int>("WrathCombo.SetAutoRotationState");
+    /// <summary>
+    /// Long enough to keep per-frame reads off the wire, short enough that the
+    /// answer is still about now.
+    /// </summary>
+    private static readonly TimeSpan CacheFor = TimeSpan.FromMilliseconds(250);
 
-    private readonly ICallGateSubscriber<bool> isCurrentJobReady =
-        plugin.GetIpcSubscriber<bool>("WrathCombo.IsCurrentJobAutoRotationReady");
+    private readonly IPluginLog log;
 
-    private readonly ICallGateSubscriber<Guid, int> setCurrentJobReady =
-        plugin.GetIpcSubscriber<Guid, int>("WrathCombo.SetCurrentJobAutoRotationReady");
-
-    private readonly ICallGateSubscriber<Guid, int, object, int> setConfig =
-        plugin.GetIpcSubscriber<Guid, int, object, int>("WrathCombo.SetAutoRotationConfigState");
-
-    private readonly ICallGateSubscriber<Guid, object> releaseControl =
-        plugin.GetIpcSubscriber<Guid, object>("WrathCombo.ReleaseControl");
+    private readonly ICallGateSubscriber<string, string, string?, Guid?> register;
+    private readonly ICallGateSubscriber<bool> getAutoRotationState;
+    private readonly ICallGateSubscriber<Guid, bool, int> setAutoRotationState;
+    private readonly ICallGateSubscriber<bool> isCurrentJobReady;
+    private readonly ICallGateSubscriber<Guid, int> setCurrentJobReady;
+    private readonly ICallGateSubscriber<Guid, int, object, int> setConfig;
+    private readonly ICallGateSubscriber<Guid, object> releaseControl;
+    private readonly ICallGateProvider<int, string, object> cancelled;
 
     private Guid? lease;
     private bool weTurnedItOn;
+    private bool surrendered;
+    private DateTime lastAttempt = DateTime.MinValue;
+
+    private bool running;
+    private DateTime runningAsOf = DateTime.MinValue;
+    private bool jobReady;
+    private DateTime jobReadyAsOf = DateTime.MinValue;
+
+    public WrathIpc(IDalamudPluginInterface plugin, IPluginLog log)
+    {
+        this.log = log;
+
+        register = plugin.GetIpcSubscriber<string, string, string?, Guid?>(
+            "WrathCombo.RegisterForLeaseWithCallback");
+        getAutoRotationState = plugin.GetIpcSubscriber<bool>("WrathCombo.GetAutoRotationState");
+        setAutoRotationState = plugin.GetIpcSubscriber<Guid, bool, int>("WrathCombo.SetAutoRotationState");
+        isCurrentJobReady = plugin.GetIpcSubscriber<bool>("WrathCombo.IsCurrentJobAutoRotationReady");
+        setCurrentJobReady = plugin.GetIpcSubscriber<Guid, int>("WrathCombo.SetCurrentJobAutoRotationReady");
+        setConfig = plugin.GetIpcSubscriber<Guid, int, object, int>("WrathCombo.SetAutoRotationConfigState");
+        releaseControl = plugin.GetIpcSubscriber<Guid, object>("WrathCombo.ReleaseControl");
+
+        // Wrath calls this when a lease ends: the player revoked it, the job
+        // changed, or Wrath itself is going away. Without it the lease dies in
+        // silence and the character stands in a field swinging at nothing.
+        cancelled = plugin.GetIpcProvider<int, string, object>("AutoKill.WrathComboCallback");
+        cancelled.RegisterAction(LeaseCancelled);
+    }
 
     /// <summary>True when something is going to be swinging, whoever arranged it.</summary>
-    public bool Rotating => weTurnedItOn || AlreadyRunning;
+    /// <remarks>
+    /// Asked of Wrath rather than remembered. A lease can end without warning,
+    /// and believing our own record of having switched it on is how a run spends
+    /// twenty minutes watching a mob that nothing is hitting.
+    /// </remarks>
+    public bool Rotating
+    {
+        get
+        {
+            if (DateTime.UtcNow - runningAsOf < CacheFor)
+                return running;
 
-    private bool AlreadyRunning => Call(() => getAutoRotationState.InvokeFunc(), false);
+            runningAsOf = DateTime.UtcNow;
+            return running = Call(() => getAutoRotationState.InvokeFunc(), false);
+        }
+    }
+
+    /// <summary>
+    /// Whether this job has anything enabled to actually rotate with. Auto
+    /// rotation being on says nothing about that, and a job with nothing in
+    /// auto-mode fights exactly as well as no rotation plugin at all.
+    /// </summary>
+    public bool JobReady
+    {
+        get
+        {
+            if (DateTime.UtcNow - jobReadyAsOf < CacheFor)
+                return jobReady;
+
+            jobReadyAsOf = DateTime.UtcNow;
+            return jobReady = Call(() => isCurrentJobReady.InvokeFunc(), true);
+        }
+    }
 
     /// <summary>
     /// Make sure a rotation is running, taking control only if one is not.
     /// </summary>
     public bool Start()
     {
-        if (AlreadyRunning)
+        if (Rotating)
         {
             // Someone is already driving. Leave every setting exactly as found.
             return true;
         }
 
-        if (lease is null)
-        {
-            // No callback prefix: the lease being revoked shows up as a refusal
-            // on the next set call, which has to be handled anyway.
-            lease = Call<Guid?>(() => register.InvokeFunc("AutoKill", "AutoKill", null), null);
-            if (lease is null)
-            {
-                log.Warning("Wrath Combo would not grant a lease, so no rotation will run.");
-                return false;
-            }
-        }
+        // The player took control back by hand. Asking again every few seconds
+        // would be arguing with them.
+        if (surrendered)
+            return false;
 
-        if (!Succeeded(Call(() => setAutoRotationState.InvokeFunc(lease.Value, true), InvalidLease), "enable auto-rotation"))
+        if (DateTime.UtcNow - lastAttempt < RetryEvery)
+            return false;
+
+        lastAttempt = DateTime.UtcNow;
+
+        if (!Registered())
+            return false;
+
+        if (!Set(id => setAutoRotationState.InvokeFunc(id, true), "enable auto-rotation"))
             return false;
 
         weTurnedItOn = true;
+        running = true;
+        runningAsOf = DateTime.UtcNow;
 
-        if (!Call(() => isCurrentJobReady.InvokeFunc(), true))
-            Succeeded(Call(() => setCurrentJobReady.InvokeFunc(lease.Value), InvalidLease), "ready this job");
+        // Sets up a job that was never configured for auto-rotation, keeping
+        // whatever the player already chose where they chose anything. It is
+        // done under the lease, so it is undone when the lease ends, and it
+        // takes a few seconds to come into effect.
+        if (!JobReady)
+        {
+            Set(id => setCurrentJobReady.InvokeFunc(id), "set this job up");
+            jobReadyAsOf = DateTime.MinValue;
+        }
 
-        // Both of these otherwise wait for a fight to have started already,
-        // which is exactly what nothing else here is going to do.
+        // The first two otherwise wait for a fight to have started already,
+        // which is exactly what nothing else here is going to do. The other two
+        // keep Wrath on the mob this plugin picked, rather than letting it
+        // choose its own and pull something on the way.
         Configure(InCombatOnly, false);
         Configure(OnlyAttackInCombat, false);
+        Configure(DpsAlwaysHardTarget, true);
+        Configure(HealerAlwaysHardTarget, true);
         return true;
     }
 
     /// <summary>Put Wrath back exactly as it was found.</summary>
     public void Stop()
     {
+        surrendered = false;
+        lastAttempt = DateTime.MinValue;
+
         if (lease is not { } id)
             return;
 
@@ -103,27 +191,89 @@ public sealed class WrathIpc(IDalamudPluginInterface plugin, IPluginLog log)
 
         if (weTurnedItOn)
         {
-            Succeeded(Call(() => setAutoRotationState.InvokeFunc(id, false), InvalidLease), "disable auto-rotation");
+            Set(_ => setAutoRotationState.InvokeFunc(id, false), "disable auto-rotation", retry: false);
             weTurnedItOn = false;
+            running = false;
+            runningAsOf = DateTime.UtcNow;
         }
 
         Call<object?>(() => { releaseControl.InvokeAction(id); return null; }, null);
     }
 
-    private void Configure(int option, bool value) =>
-        Succeeded(Call(() => setConfig.InvokeFunc(lease!.Value, option, value), InvalidLease), $"set option {option}");
-
-    private bool Succeeded(int result, string what)
+    public void Dispose()
     {
+        Stop();
+        cancelled.UnregisterAction();
+    }
+
+    /// <summary>
+    /// Wrath telling us the lease is over. Which reason it gives decides whether
+    /// trying again is repair or nagging.
+    /// </summary>
+    private void LeaseCancelled(int reason, string detail)
+    {
+        lease = null;
+        weTurnedItOn = false;
+        runningAsOf = DateTime.MinValue;
+        jobReadyAsOf = DateTime.MinValue;
+
+        // Every other reason, a job change most of all, is worth recovering
+        // from: the next tick registers again and sets the new job up.
+        surrendered = reason == UserRevokedIt;
+
+        log.Information(
+            surrendered
+                ? "Wrath Combo control was taken back by hand, so the fighting is yours from here."
+                : $"Wrath Combo ended the lease (reason {reason}), so it will be taken again. {detail}");
+    }
+
+    private bool Registered()
+    {
+        if (lease is not null)
+            return true;
+
+        // The prefix names the IPC Wrath calls when the lease ends.
+        lease = Call<Guid?>(() => register.InvokeFunc("AutoKill", "AutoKill", "AutoKill"), null);
+        if (lease is not null)
+            return true;
+
+        log.Warning("Wrath Combo would not grant a lease, so no rotation will run.");
+        return false;
+    }
+
+    private void Configure(int option, bool value) =>
+        Set(id => setConfig.InvokeFunc(id, option, value), $"set option {option}");
+
+    /// <summary>
+    /// Run something that needs a lease, once more with a fresh lease if the one
+    /// held turned out to be spent.
+    /// </summary>
+    private bool Set(Func<Guid, int> call, string what, bool retry = true)
+    {
+        if (lease is not { } id)
+            return false;
+
+        var result = Call(() => call(id), InvalidLease);
         if (result is Okay or OkayWorking)
             return true;
 
-        // A refused lease is spent. Dropping it means the next attempt registers
-        // afresh rather than repeating a call that can no longer work.
-        if (result == InvalidLease)
-            lease = null;
+        if (result != InvalidLease)
+        {
+            log.Warning($"Wrath Combo would not {what} (result {result}).");
+            return false;
+        }
 
-        log.Warning($"Wrath Combo would not {what} (result {result}).");
+        // A refused lease is spent, so the one thing worth doing is asking for
+        // another and trying once. Twice would be a loop.
+        lease = null;
+        if (!retry || !Registered())
+            return false;
+
+        var second = Call(() => call(lease.Value), InvalidLease);
+        if (second is Okay or OkayWorking)
+            return true;
+
+        log.Warning($"Wrath Combo would not {what}, even with a new lease (result {second}).");
         return false;
     }
 

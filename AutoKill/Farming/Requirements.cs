@@ -77,9 +77,21 @@ public sealed class Requirements(IDalamudPluginInterface plugin, NavmeshIpc navm
         if (!installed.IsLoaded)
             return new Requirement(name, RequirementState.Optional, "installed but not enabled");
 
+        // Auto-rotation being on says nothing about the job having anything to
+        // rotate with, and a job with nothing in auto-mode stands there swinging
+        // at nothing. Left alone means left alone, so this is said rather than
+        // fixed behind somebody's back.
+        if (wrath.Rotating && !wrath.JobReady)
+        {
+            return new Requirement(
+                name,
+                RequirementState.Optional,
+                "auto-rotation is on, but this job has nothing enabled in auto-mode");
+        }
+
         return wrath.Rotating
             ? new Requirement(name, RequirementState.Good, "auto-rotation already on, so it will be left alone")
-            : new Requirement(name, RequirementState.Good, "ready");
+            : new Requirement(name, RequirementState.Good, "ready, and it will set this job up if needed");
     }
 
     private IExposedPlugin? Find(string internalName) =>
