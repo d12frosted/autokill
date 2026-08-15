@@ -12,6 +12,11 @@ reading the diff. Dates are when the tag went out.
   set to what is left rather than the whole bill. The counts are the game's own,
   so they are right about kills from before you opened the window.
 
+  Targets that only exist inside a FATE say so, and only offer to go while that
+  FATE is actually running. There are 96 of them, all on ordinary bills, and
+  standing where one would be is how a run waits forever. When the FATE is up it
+  goes to where the FATE is rather than where the mob was once recorded.
+
   The weekly elite bill is included. Every one of those names a B rank, which is
   a mob one player is expected to kill, and marks are the best covered thing in
   the position data: 74 of the 77 stand somewhere the plugin knows about. If the

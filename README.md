@@ -32,7 +32,8 @@ item on the list, it is a hide two steps under it.
 left on each. Pick a target and it goes to that mob, in the zone the bill names, with the
 kill count set to what is still owed. That includes the weekly elite bill: every one of
 those names a B rank, and if the mark is not up the run patrols its spawn points until it
-is.
+is. Targets that only appear inside a FATE say so, and can only be picked while that FATE
+is running, in which case it goes to where the FATE actually is.
 
 **Farm an area, not a spot.** Mobs of one kind are spread over a field in several loose
 knots. AutoKill treats the whole field as one place, flies a circuit around it, and moves

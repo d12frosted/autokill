@@ -23,6 +23,9 @@ common mobs and one for the named ones. The weekly elite bill names a single mar
 elite bill target in the sheet is rank 1 in `NotoriousMonster`, which is a B rank: there
 are no A or S ranks on a bill, and a B rank is a mob one player is expected to kill.
 
+Some targets do not stand anywhere at all until a FATE starts. `MobHuntTarget` names
+the FATE, and 96 of the 811 targets have one, all of them on ordinary bills.
+
 Coverage was measured against the shipped position data, by target and by the map the
 bill itself names:
 
@@ -41,6 +44,10 @@ once behaves nothing like three of something common.
 
 Offer only areas inside the territory the bill names, and say "nowhere recorded in that
 zone" rather than falling back to the same mob elsewhere.
+
+Offer a FATE target only while its FATE is running, and then go to where the FATE is
+rather than where the mob was recorded. Being outside the zone is reported differently
+from the FATE being down, since the FATE table only carries the current zone.
 
 Set the kill goal to what is left on the target, and set nothing else.
 
@@ -65,6 +72,12 @@ outside it is logged and the bill skipped.
   would be worse than doing nothing.
 - The goal is only ever kills, because a bill is finished by killing. A time limit or a
   drop target could only stop a run before the bill was done.
+- A FATE target outside its FATE is not offered at all. It could be offered as a place to
+  stand and wait, which is how someone would camp one by hand, but a run that finds
+  nothing looks identical to a run that is broken, and that is not a thing to ship.
+- A live FATE is a better position than anything in the shipped data, since it is where
+  the mob is now rather than where it was once seen. That is the only place this plugin
+  farms somewhere it was not told about in advance.
 - The range check is there because the row id comes from a signature-scanned function.
   If a game patch moves it, the failure is a skipped bill and a warning rather than a
   character sent to the wrong end of the world.
