@@ -23,6 +23,19 @@ reading the diff. Dates are when the tag went out.
   mark is not up, the run patrols its spawn points until it is, which is what
   hunting one looks like by hand.
 
+### Fixed
+
+- **Wrath keeps fighting after a job change.** Changing job ends Wrath's lease, and the
+  plugin used to believe its own record of having started a rotation, so the rest of the
+  run was spent watching a mob that nothing was hitting. It now asks Wrath, takes the
+  lease again, and sets up the new job. A player who takes control back by hand is left
+  alone rather than argued with.
+- **Wrath attacks the mob AutoKill picked** rather than choosing its own, which could pull
+  something the run was not walking towards.
+- The needs panel says when auto-rotation is on but the current job has nothing enabled in
+  auto-mode. That fights exactly as well as having no rotation plugin at all, and used to
+  look like the plugin doing nothing.
+
 ## 0.0.3 - 2026-08-14
 
 ### Added
