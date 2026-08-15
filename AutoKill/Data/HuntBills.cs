@@ -5,6 +5,11 @@ using Lumina.Excel.Sheets;
 namespace AutoKill.Data;
 
 /// <summary>One mob a bill wants killed, and how far along it is.</summary>
+/// <param name="FateId">
+/// Some targets only exist while a FATE is running: the named ones on ordinary
+/// bills are often the boss of one. Sending a run to stand where it would be is
+/// how you wait forever, so the bill has to say this out loud.
+/// </param>
 /// <param name="Where">
 /// The bill names a place inside the zone, like "Boulder Downs" rather than
 /// "Coerthas Central Highlands". Nothing here can turn that into coordinates,
@@ -16,9 +21,13 @@ public sealed record HuntTarget(
     uint TerritoryTypeId,
     string Zone,
     string Where,
+    ushort FateId,
+    string FateName,
     int Needed,
     int Killed)
 {
+    public bool Fated => FateId != 0;
+
     public int Remaining => Math.Max(0, Needed - Killed);
 
     public bool Done => Remaining == 0;
@@ -102,12 +111,16 @@ public sealed class HuntBills(IDataManager data, IPluginLog log)
                 var zone = territories.GetRowOrDefault(territoryId)?.PlaceName.ValueNullable?.Name.ExtractText()
                            ?? string.Empty;
 
+                var fate = target.FATE.ValueNullable;
+
                 targets.Add(new HuntTarget(
                     nameId,
                     name.Singular.ExtractText(),
                     territoryId,
                     zone,
                     target.PlaceName.ValueNullable?.Name.ExtractText() ?? string.Empty,
+                    (ushort)target.FATE.RowId,
+                    fate?.Name.ExtractText() ?? string.Empty,
                     order.NeededKills,
                     state->MobHunt.CurrentKills[markIndex][mobIndex]));
             }

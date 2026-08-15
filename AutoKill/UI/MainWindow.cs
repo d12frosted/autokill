@@ -33,6 +33,7 @@ public sealed class MainWindow : Window
     private readonly RunHistory history;
     private readonly ArtisanLists artisan;
     private readonly HuntBills hunts;
+    private readonly Fates fates;
     private readonly Action saveConfig;
 
     private string mobQuery = string.Empty;
@@ -62,6 +63,7 @@ public sealed class MainWindow : Window
         RunHistory history,
         ArtisanLists artisan,
         HuntBills hunts,
+        Fates fates,
         Action saveConfig)
         : base("AutoKill###AutoKillMain")
     {
@@ -73,6 +75,7 @@ public sealed class MainWindow : Window
         this.history = history;
         this.artisan = artisan;
         this.hunts = hunts;
+        this.fates = fates;
         this.saveConfig = saveConfig;
         SizeConstraints = new WindowSizeConstraints
         {
@@ -196,6 +199,12 @@ public sealed class MainWindow : Window
 
         using var indent = ImRaii.PushIndent();
 
+        if (target.Fated)
+        {
+            DrawFatedTarget(mobs, target);
+            return;
+        }
+
         // Only the zone the bill names. A mob of the same name elsewhere counts
         // for nothing, and sending someone there would be worse than useless.
         var areas = mobs.Get(target.BNpcNameId)?.Areas
@@ -223,6 +232,37 @@ public sealed class MainWindow : Window
 
         if (areas.Count > 2)
             ImGui.TextDisabled($"... and {areas.Count - 2} more in that zone");
+    }
+
+    /// <summary>
+    /// A target that only exists while a FATE is running.
+    /// </summary>
+    /// <remarks>
+    /// Standing where it would be is how a run waits forever, so this only
+    /// offers to go when the FATE is actually up, and then goes to where the
+    /// FATE is rather than where the mob was once recorded. That is the better
+    /// position anyway: it is live rather than remembered.
+    ///
+    /// Being out of the zone is not the same as the FATE being down, and saying
+    /// so would be a guess dressed as a fact.
+    /// </remarks>
+    private void DrawFatedTarget(MobIndex mobs, HuntTarget target)
+    {
+        var named = string.IsNullOrEmpty(target.FateName) ? "a FATE" : $"the FATE \"{target.FateName}\"";
+
+        if (fates.Running(target.FateId) is { } running)
+        {
+            if (ImGui.SmallButton("Choose"))
+                PlanHunt(mobs, target, mobs.AreaAt(target.TerritoryTypeId, running.Position));
+
+            ImGui.SameLine();
+            ImGui.TextDisabled($"{named} is up now, {running.Progress}% done");
+            return;
+        }
+
+        ImGui.TextDisabled(fates.InZone(target.TerritoryTypeId)
+            ? $"{named} is not running"
+            : $"only while {named} is running");
     }
 
     private void PlanHunt(MobIndex mobs, HuntTarget target, FarmArea area)

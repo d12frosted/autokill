@@ -25,6 +25,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ITargetManager Targets { get; private set; } = null!;
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static IToastGui Toast { get; private set; } = null!;
+    [PluginService] internal static IFateTable FateTable { get; private set; } = null!;
     [PluginService] internal static ITextureProvider Textures { get; private set; } = null!;
 
     private readonly WindowSystem windows = new("AutoKill");
@@ -54,6 +55,7 @@ public sealed class Plugin : IDalamudPlugin
             Path.Combine(PluginInterface.ConfigFile.Directory!.FullName, "Artisan.json"), DataManager, Log);
 
         var hunts = new HuntBills(DataManager, Log);
+        var fates = new Fates(FateTable, ClientState);
 
         var navmesh = new NavmeshIpc(PluginInterface, Log);
         notifier = new Notifier(ChatGui, Toast) { Enabled = config.Notifications };
@@ -64,7 +66,7 @@ public sealed class Plugin : IDalamudPlugin
             itemId => index?.ItemName(itemId) ?? $"item {itemId}", config, NewRecorder, observations, history, Log);
 
         mainWindow = new MainWindow(
-            () => index, farming, Textures, config, observations, history, artisan, hunts, Save);
+            () => index, farming, Textures, config, observations, history, artisan, hunts, fates, Save);
         windows.AddWindow(mainWindow);
 
         PluginInterface.UiBuilder.Draw += windows.Draw;
