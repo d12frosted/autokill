@@ -239,6 +239,11 @@ public sealed class MobIndex
             if (string.IsNullOrWhiteSpace(label))
                 continue;
 
+            // The game keeps these in lower case. Read one at a time that is
+            // fine; read as a list it is a wall with nothing for the eye to
+            // catch on. Searching stays case insensitive either way.
+            label = Phrases.Capitalise(label);
+
             var locations = locationsByMob.GetValueOrDefault(nameId) ?? [];
 
             byNameId[nameId] = new MobEntry(

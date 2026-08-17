@@ -1,3 +1,4 @@
+using AutoKill.Core;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using Lumina.Excel.Sheets;
@@ -115,7 +116,9 @@ public sealed class HuntBills(IDataManager data, IPluginLog log)
 
                 targets.Add(new HuntTarget(
                     nameId,
-                    name.Singular.ExtractText(),
+                    // Same as everywhere else the window names a mob: the sheet
+                    // keeps them in lower case and a list of them is unreadable.
+                    Phrases.Capitalise(name.Singular.ExtractText()),
                     territoryId,
                     zone,
                     target.PlaceName.ValueNullable?.Name.ExtractText() ?? string.Empty,

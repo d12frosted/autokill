@@ -4,6 +4,46 @@ namespace AutoKill.Core;
 public static class Phrases
 {
     /// <summary>
+    /// Words that only join two others, and are left down unless they start
+    /// the name.
+    /// </summary>
+    private static readonly HashSet<string> Joining =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "a", "an", "and", "at", "de", "for", "from", "in", "of", "on", "or",
+            "the", "to", "with",
+        };
+
+    /// <summary>
+    /// A name as a name: "kokkine petalouda" becomes "Kokkine Petalouda".
+    /// </summary>
+    /// <remarks>
+    /// The game keeps mob names in lower case, which is fine in a target bar
+    /// where there is one of them and it is the only thing there. In a list of
+    /// twenty it is a wall of undifferentiated text, and the eye has nothing to
+    /// catch on when looking for where one name ends and the next begins.
+    ///
+    /// Only the first letter of a word is touched. Numerals and names the game
+    /// already shouts are how they are meant to be.
+    /// </remarks>
+    public static string Capitalise(string name)
+    {
+        var words = name.Split(' ');
+
+        for (var i = 0; i < words.Length; i++)
+        {
+            if (words[i].Length == 0)
+                continue;
+            if (i > 0 && Joining.Contains(words[i]))
+                continue;
+
+            words[i] = char.ToUpperInvariant(words[i][0]) + words[i][1..];
+        }
+
+        return string.Join(' ', words);
+    }
+
+    /// <summary>
     /// Names read out in full: "a", "a and b", "a, b and c".
     /// </summary>
     /// <remarks>
