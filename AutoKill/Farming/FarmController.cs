@@ -70,13 +70,14 @@ public sealed class FarmController : IDisposable
 
     public string? Blocker => Requirements.Blocker;
 
-    public void Start(MobEntry mob, FarmArea area, StopConditions conditions)
+    public void Start(FarmTarget target, StopConditions conditions)
     {
         Stop("replaced");
         Current = new FarmSession(
-            mob, area, conditions, navmesh, wrath, clientState, objects, targets, data, condition, notifier, itemName, config, newRecorder(), observations, history, log);
-        log.Information($"Farming {mob.Name} in {area.ZoneName}, {area.Spots.Count} spot(s).");
-        notifier.Info($"farming {mob.Name} in {area.ZoneName}.");
+            target, conditions, navmesh, wrath, clientState, objects, targets, data, condition, notifier, itemName, config, newRecorder(), observations, history, log);
+        log.Information(
+            $"Farming {target.Name} in {target.Area.ZoneName}, {target.Area.Spots.Count} spot(s).");
+        notifier.Info($"farming {target.Name} in {target.Area.ZoneName}.");
     }
 
     public void Stop(string reason = "stopped")

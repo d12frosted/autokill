@@ -46,8 +46,7 @@ public sealed class MainWindow : Window
     private CraftingList? craftingList;
     private IReadOnlyList<ListMaterial> craftingMaterials = [];
 
-    private MobEntry? plannedMob;
-    private FarmArea? plannedArea;
+    private FarmTarget? plannedTarget;
     private readonly Dictionary<uint, int> itemGoals = [];
     private int killTarget;
     private int minuteTarget;
@@ -104,16 +103,16 @@ public sealed class MainWindow : Window
         {
             // The title carries the state too, since the window is often behind
             // something else while a run is going.
-            WindowName = $"AutoKill - {session.Mob.Name}###AutoKillMain";
+            WindowName = $"AutoKill - {session.Target.Name}###AutoKillMain";
             DrawRun(mobs, session);
             return;
         }
 
         WindowName = "AutoKill###AutoKillMain";
 
-        if (plannedMob is not null && plannedArea is not null)
+        if (plannedTarget is not null)
         {
-            DrawPlan(mobs, plannedMob, plannedArea);
+            DrawPlan(mobs, plannedTarget);
             return;
         }
 
@@ -276,7 +275,9 @@ public sealed class MainWindow : Window
         minuteTarget = 0;
         requireAll = false;
 
-        Plan(mob, area, carryItem: false);
+        // The bill names one mob, and only that one counts towards it, so this
+        // is the one flow that never takes a whole field.
+        Plan(new FarmTarget(mob, area), carryItem: false);
     }
 
     /// <summary>
@@ -316,7 +317,7 @@ public sealed class MainWindow : Window
             using var id = ImRaii.PushId(run.When.Ticks.GetHashCode());
 
             var elapsed = TimeSpan.FromSeconds(run.ElapsedSeconds);
-            ImGui.TextUnformatted($"{run.MobName}  in {mobs.ZoneName(run.TerritoryId)}");
+            ImGui.TextUnformatted($"{run.Named}  in {mobs.ZoneName(run.TerritoryId)}");
             ImGui.TextDisabled(
                 $"{run.When:d MMM HH:mm}   {run.Kills} killed in {elapsed:hh\\:mm\\:ss}   {run.Reason}");
 
@@ -344,24 +345,32 @@ public sealed class MainWindow : Window
         }
     }
 
-    /// <summary>The area this run used, as the current data sees it.</summary>
-    private static FarmArea? Repeatable(MobIndex mobs, RunRecord run) =>
-        mobs.Get(run.MobId)?.Areas
-            .Where(a => a.TerritoryTypeId == run.TerritoryId)
-            .OrderBy(a => Vector2.Distance(
-                new Vector2(a.Centre.X, a.Centre.Z), new Vector2(run.AreaX, run.AreaZ)))
+    /// <summary>The ground this run covered, as the current data sees it.</summary>
+    private static FarmTarget? Repeatable(MobIndex mobs, RunRecord run)
+    {
+        var killed = run.Mobs
+            .Select(mobs.Get)
+            .Where(mob => mob is not null)
+            .Select(mob => mob!)
+            .ToList();
+
+        return mobs.Fields(killed)
+            .Where(field => field.Area.TerritoryTypeId == run.TerritoryId)
+            .OrderBy(field => Vector2.Distance(
+                new Vector2(field.Area.Centre.X, field.Area.Centre.Z), new Vector2(run.AreaX, run.AreaZ)))
             .FirstOrDefault();
+    }
 
     private void Repeat(MobIndex mobs, RunRecord run)
     {
-        if (mobs.Get(run.MobId) is not { } mob || Repeatable(mobs, run) is not { } area)
+        if (Repeatable(mobs, run) is not { } target)
             return;
 
         killTarget = run.KillTarget;
         minuteTarget = (int)Math.Round(run.MinuteTarget);
         requireAll = run.RequireAll;
 
-        Plan(mob, area);
+        Plan(target);
 
         // Plan clears the goals and may preselect a searched item, so the
         // remembered ones go in afterwards or they would be thrown away.
@@ -445,7 +454,7 @@ public sealed class MainWindow : Window
         var progress = session.Progress;
         var finished = session.Phase == FarmPhase.Finished;
 
-        ImGui.TextUnformatted(session.Mob.Name);
+        ImGui.TextUnformatted(session.Target.Name);
         ImGui.TextDisabled(
             $"{session.Area.ZoneName}  ({session.Area.MapCentre.X:F1}, {session.Area.MapCentre.Y:F1})"
             + (session.Area.Spots.Count > 1 ? $"  {session.Area.Spots.Count} spots" : string.Empty));
@@ -497,12 +506,14 @@ public sealed class MainWindow : Window
             return;
 
         resultDismissed = true;
-        Plan(session.Mob, session.Area);
+        Plan(session.Target);
     }
 
-    private void DrawPlan(MobIndex mobs, MobEntry mob, FarmArea area)
+    private void DrawPlan(MobIndex mobs, FarmTarget target)
     {
-        ImGui.TextUnformatted($"Farm {mob.Name}");
+        var area = target.Area;
+
+        ImGui.TextUnformatted($"Farm {target.Name}");
         ImGui.TextDisabled(
             $"{area.ZoneName}  ({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})  "
             + $"{area.SpawnCount} spawns"
@@ -518,11 +529,11 @@ public sealed class MainWindow : Window
         ImGui.SetNextItemWidth(120);
         ImGui.InputInt("minutes", ref minuteTarget);
 
-        if (mob.Drops.Count > 0)
+        if (target.Drops.Count > 0)
         {
             ImGui.Spacing();
-            ImGui.TextDisabled("Collect");
-            foreach (var itemId in mob.Drops)
+            ImGui.TextDisabled(target.Shared ? "Collect, from any of them" : "Collect");
+            foreach (var itemId in target.Drops)
             {
                 using var id = ImRaii.PushId((int)itemId);
 
@@ -548,7 +559,9 @@ public sealed class MainWindow : Window
         }
         else
         {
-            ImGui.TextDisabled("Nothing known drops from this one.");
+            ImGui.TextDisabled(target.Shared
+                ? "Nothing known drops from any of these."
+                : "Nothing known drops from this one.");
         }
 
         ImGui.Spacing();
@@ -562,7 +575,7 @@ public sealed class MainWindow : Window
         if (ImGui.Button("Start"))
         {
             resultDismissed = false;
-            farming.Start(mob, area, BuildConditions());
+            farming.Start(target, BuildConditions());
             ClearPlan();
         }
 
@@ -692,24 +705,19 @@ public sealed class MainWindow : Window
         ImGui.SameLine();
     }
 
-    private void Plan(MobEntry mob, FarmArea area, bool carryItem = true)
+    private void Plan(FarmTarget target, bool carryItem = true)
     {
-        plannedMob = mob;
-        plannedArea = area;
+        plannedTarget = target;
         itemGoals.Clear();
 
         // Arriving from an item search means the item is already known, so do
         // not make it be picked out of the list a second time. How much is
         // wanted comes with it, which is the whole use of a crafting list.
-        if (carryItem && selectedItem != 0 && mob.Drops.Contains(selectedItem))
+        if (carryItem && selectedItem != 0 && target.Drops.Contains(selectedItem))
             itemGoals[selectedItem] = Math.Max(1, selectedItemWanted);
     }
 
-    private void ClearPlan()
-    {
-        plannedMob = null;
-        plannedArea = null;
-    }
+    private void ClearPlan() => plannedTarget = null;
 
     private StopConditions BuildConditions()
     {
@@ -817,12 +825,90 @@ public sealed class MainWindow : Window
             return;
         }
 
-        foreach (var mob in droppers)
-        {
-            ImGui.TextUnformatted(mob.Name);
-            DrawMobDetail(mob);
-        }
+        DrawFields(mobs.FieldsDropping(selectedItem));
+
+        // Said rather than left out. A mob with nowhere recorded is a gap in the
+        // data, and silently dropping it reads as the mob not dropping the item.
+        var nowhere = droppers.Where(mob => !mob.Farmable).ToList();
+        if (nowhere.Count == 0)
+            return;
+
+        ImGui.Spacing();
+        ImGui.TextDisabled(
+            $"Also dropped by {Phrases.List(nowhere.Select(mob => mob.Name).ToList())},");
+        ImGui.TextDisabled("with nowhere recorded to find them.");
     }
+
+    /// <summary>
+    /// Somewhere to farm, and everything standing there that drops what was
+    /// asked for.
+    /// </summary>
+    /// <remarks>
+    /// Places rather than mobs, because the search was for an item and the item
+    /// does not care which of them dropped it. Three kinds of petalouda share
+    /// two fields in Elpis: offered one at a time, whichever is picked means
+    /// flying past the other two. Offered as a field, the run kills all of them.
+    ///
+    /// One kind on its own is still worth having, so it stays available under
+    /// each field rather than being decided for you.
+    /// </remarks>
+    private void DrawFields(IReadOnlyList<FarmTarget> fields)
+    {
+        foreach (var field in fields.Take(5))
+        {
+            var area = field.Area;
+            using var id = ImRaii.PushId($"{area.TerritoryTypeId}-{area.Centre.X:F0}-{area.Centre.Z:F0}");
+
+            ImGui.TextUnformatted($"{area.ZoneName}  ({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})");
+            ImGui.SameLine();
+            ImGui.TextDisabled(
+                $"{area.SpawnCount} spawns"
+                + (area.Spots.Count > 1 ? $" over {area.Spots.Count} spots" : string.Empty));
+
+            using var indent = ImRaii.PushIndent();
+
+            if (ImGui.SmallButton("Choose"))
+                Plan(field);
+
+            ImGui.SameLine();
+            ImGui.TextUnformatted(field.Name);
+
+            if (!field.Shared)
+                continue;
+
+            using var inner = ImRaii.PushIndent();
+
+            foreach (var mob in field.Mobs)
+            {
+                using var mobId = ImRaii.PushId((int)mob.BNpcNameId);
+
+                if (Alone(mob, area) is not { } own)
+                    continue;
+
+                if (ImGui.SmallButton("only this"))
+                    Plan(new FarmTarget(mob, own));
+
+                ImGui.SameLine();
+                ImGui.TextDisabled($"{mob.Name}  {own.SpawnCount} spawns");
+            }
+        }
+
+        if (fields.Count > 5)
+            ImGui.TextDisabled($"... and {fields.Count - 5} more");
+    }
+
+    /// <summary>
+    /// One mob's own patch of a shared field, for going after just that one.
+    /// Its spots were folded in with everyone else's to make the field, so the
+    /// area it would have had on its own is looked up again by where it is.
+    /// </summary>
+    private static FarmArea? Alone(MobEntry mob, FarmArea field) =>
+        mob.Areas
+            .Where(area => area.TerritoryTypeId == field.TerritoryTypeId)
+            .OrderBy(area => Vector2.Distance(
+                new Vector2(area.Centre.X, area.Centre.Z),
+                new Vector2(field.Centre.X, field.Centre.Z)))
+            .FirstOrDefault();
 
     /// <summary>
     /// Pick a crafting list instead of searching, when there are any.
@@ -945,7 +1031,7 @@ public sealed class MainWindow : Window
             using var id = ImRaii.PushId($"{mob.BNpcNameId}-{area.TerritoryTypeId}-{area.Centre.X:F0}");
 
             if (ImGui.SmallButton("Choose"))
-                Plan(mob, area);
+                Plan(new FarmTarget(mob, area));
 
             ImGui.SameLine();
             ImGui.TextDisabled(

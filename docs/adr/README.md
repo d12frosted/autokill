@@ -21,3 +21,4 @@ Status values: `Proposed`, `Accepted`, `Superseded by NNNN`, `Rejected`.
 | [0010](0010-installing-as-a-dev-plugin.md) | Installing as a dev plugin | Accepted |
 | [0011](0011-crafting-lists-from-artisans-config.md) | Crafting lists from Artisan's config file | Accepted |
 | [0012](0012-hunt-bills-come-from-the-client.md) | Hunt bills come from the client | Accepted |
+| [0013](0013-a-run-goes-after-a-set-of-mobs.md) | A run goes after a set of mobs | Accepted |

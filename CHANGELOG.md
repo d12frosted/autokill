@@ -7,6 +7,20 @@ reading the diff. Dates are when the tag went out.
 
 ### Added
 
+- **By drop offers the field, not the species.** Several mobs often drop the same
+  item in the same place: three kinds of petalouda share two fields in Elpis, and
+  all three drop petalouda scales. Picking one of them meant flying past the other
+  two and then waiting on a respawn timer with the field still full.
+
+  The By drop tab now lists places rather than mobs. Each one names everything
+  standing there that drops what you asked for, and choosing it farms all of them,
+  so the kill count, the item goal and the circuit all count the whole field. If
+  you want only one kind, it is still offered under each field.
+
+  A run that goes after several kinds still learns them separately, so what it
+  knows about one mob is not muddled by what it learnt about another sharing its
+  ground.
+
 - **A Hunts tab.** The hunt bills you are carrying, read out of the client, with
   each unfinished target offered in the zone the bill names and the kill goal
   set to what is left rather than the whole bill. The counts are the game's own,

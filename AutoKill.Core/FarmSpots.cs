@@ -21,12 +21,12 @@ public sealed record FarmSpot(Vector3 Centre, int Count);
 public static class FarmSpots
 {
     public static IReadOnlyList<FarmSpot> Cluster(IReadOnlyList<Vector3> points, float radius) =>
-        Group(points, radius)
+        GroupIndices(points, radius)
             .Select(group => new FarmSpot(
                 new Vector3(
-                    group.Average(p => p.X),
-                    group.Average(p => p.Y),
-                    group.Average(p => p.Z)),
+                    group.Average(i => points[i].X),
+                    group.Average(i => points[i].Y),
+                    group.Average(i => points[i].Z)),
                 group.Count))
             .ToList();
 
@@ -35,7 +35,15 @@ public static class FarmSpots
     /// same way points are grouped into spots, and an area is patrolled by
     /// visiting the spots that make it up, so which went where has to survive.
     /// </summary>
-    public static IReadOnlyList<IReadOnlyList<Vector3>> Group(IReadOnlyList<Vector3> points, float radius)
+    /// <remarks>
+    /// Members come back as positions in the input rather than as points. Two
+    /// things can stand in exactly the same place, and once the spots of several
+    /// mobs are put together that is ordinary rather than freakish. Matching a
+    /// member back to what it came from by comparing positions would silently
+    /// pick one of them and lose the rest.
+    /// </remarks>
+    public static IReadOnlyList<IReadOnlyList<int>> GroupIndices(
+        IReadOnlyList<Vector3> points, float radius)
     {
         if (points.Count == 0)
             return [];
@@ -70,20 +78,20 @@ public static class FarmSpots
             }
         }
 
-        var groups = new Dictionary<int, List<Vector3>>();
+        var groups = new Dictionary<int, List<int>>();
         for (var i = 0; i < points.Count; i++)
         {
             if (!groups.TryGetValue(Find(i), out var group))
                 groups[Find(i)] = group = [];
-            group.Add(points[i]);
+            group.Add(i);
         }
 
         return groups.Values
             // Densest first, then by position so output does not depend on input order.
             .OrderByDescending(group => group.Count)
-            .ThenBy(group => group.Average(p => p.X))
-            .ThenBy(group => group.Average(p => p.Z))
-            .Cast<IReadOnlyList<Vector3>>()
+            .ThenBy(group => group.Average(i => points[i].X))
+            .ThenBy(group => group.Average(i => points[i].Z))
+            .Cast<IReadOnlyList<int>>()
             .ToList();
     }
 }

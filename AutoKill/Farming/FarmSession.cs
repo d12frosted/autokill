@@ -62,8 +62,12 @@ public sealed class FarmSession
     private static readonly TimeSpan RejectionInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan TeleportCooldown = TimeSpan.FromSeconds(10);
 
-    private readonly MobEntry mob;
+    private readonly FarmTarget target;
     private readonly FarmArea area;
+
+    // Every kind this run is here for, as a set, because "is this one of ours"
+    // is asked of every object in the table several times a tick.
+    private readonly HashSet<uint> nameIds;
     private readonly StopConditions conditions;
     private readonly NavmeshIpc navmesh;
     private readonly WrathIpc wrath;
@@ -86,6 +90,11 @@ public sealed class FarmSession
     private readonly HashSet<ulong> engaged = [];
     private readonly Dictionary<ulong, DateTime> engagedAt = [];
 
+    // What each of them was, taken while it is still alive to ask. A corpse is
+    // gone from the table by the time the kill is counted, and the kill belongs
+    // to a species rather than to the run as a whole.
+    private readonly Dictionary<ulong, uint> engagedName = [];
+
     private DateTime lastMove = DateTime.MinValue;
     private DateTime lastMountAction = DateTime.MinValue;
     private bool flagged;
@@ -107,8 +116,7 @@ public sealed class FarmSession
     private int kills;
 
     public FarmSession(
-        MobEntry mob,
-        FarmArea area,
+        FarmTarget target,
         StopConditions conditions,
         NavmeshIpc navmesh,
         WrathIpc wrath,
@@ -125,8 +133,9 @@ public sealed class FarmSession
         RunHistory history,
         IPluginLog log)
     {
-        this.mob = mob;
-        this.area = area;
+        this.target = target;
+        area = target.Area;
+        nameIds = [.. target.BNpcNameIds];
         this.conditions = conditions;
         this.navmesh = navmesh;
         this.wrath = wrath;
@@ -144,7 +153,7 @@ public sealed class FarmSession
         this.log = log;
 
         // Anything already in the bags is not something this run produced.
-        foreach (var itemId in mob.Drops)
+        foreach (var itemId in target.Drops)
             baselineCounts[itemId] = Bags.CountOf(itemId);
 
         Phase = FarmPhase.Teleporting;
@@ -152,9 +161,8 @@ public sealed class FarmSession
 
         recorder?.Write("start", new
         {
-            mob = mob.Name,
-            mobId = mob.BNpcNameId,
-            baseIds = mob.BaseIds,
+            mob = target.Name,
+            mobs = target.Mobs.Select(m => new { name = m.Name, id = m.BNpcNameId, baseIds = m.BaseIds }),
             zone = area.ZoneName,
             territory = area.TerritoryTypeId,
             spots = area.Spots.Select(spot => new
@@ -183,7 +191,7 @@ public sealed class FarmSession
 
     public string Status { get; private set; }
 
-    public MobEntry Mob => mob;
+    public FarmTarget Target => target;
 
     public FarmArea Area => area;
 
@@ -282,10 +290,10 @@ public sealed class FarmSession
         {
             lastSighting = DateTime.UtcNow;
             foreach (var npc in objects.OfType<IBattleNpc>()
-                         .Where(n => n.NameId == mob.BNpcNameId && !n.IsDead && n.CurrentHp > 0))
+                         .Where(n => nameIds.Contains(n.NameId) && !n.IsDead && n.CurrentHp > 0))
             {
                 observations.RecordSighting(
-                    mob.BNpcNameId, area.TerritoryTypeId, npc.Position.X, npc.Position.Z);
+                    npc.NameId, area.TerritoryTypeId, npc.Position.X, npc.Position.Z);
             }
         }
 
@@ -307,10 +315,11 @@ public sealed class FarmSession
             rotating = wrath.Rotating,
             nearby = objects
                 .OfType<IBattleNpc>()
-                .Where(npc => npc.NameId == mob.BNpcNameId && !npc.IsDead && npc.CurrentHp > 0)
+                .Where(npc => nameIds.Contains(npc.NameId) && !npc.IsDead && npc.CurrentHp > 0)
                 .Select(npc => new
                 {
                     id = npc.GameObjectId,
+                    what = npc.NameId,
                     d = Math.Round(Vector3.Distance(npc.Position, player.Position), 1),
                     x = Math.Round(npc.Position.X, 1),
                     z = Math.Round(npc.Position.Z, 1),
@@ -334,7 +343,7 @@ public sealed class FarmSession
         Remember(reason, progress);
         navmesh.StopCompletely();
         wrath.Stop();
-        log.Information($"Farming {mob.Name} stopped: {reason}");
+        log.Information($"Farming {target.Name} stopped: {reason}");
 
         Announce(reason, met, progress);
     }
@@ -345,8 +354,8 @@ public sealed class FarmSession
     /// </summary>
     private void Announce(string reason, IReadOnlyList<IStopCondition> met, FarmProgress progress)
     {
-        var chat = new SeStringBuilder().AddText($"{mob.Name}: ");
-        var plain = $"{mob.Name}: ";
+        var chat = new SeStringBuilder().AddText($"{target.Name}: ");
+        var plain = $"{target.Name}: ";
 
         // Whatever ended the run, said once. Items in it are linked where they
         // stand, so there is no need to repeat them in a tally afterwards.
@@ -415,8 +424,10 @@ public sealed class FarmSession
         history.Add(new RunRecord
         {
             When = DateTime.Now,
-            MobId = mob.BNpcNameId,
-            MobName = mob.Name,
+            MobIds = target.Mobs.Select(m => m.BNpcNameId).ToList(),
+            MobNames = target.Mobs.Select(m => m.Name).ToList(),
+            MobId = target.Mobs[0].BNpcNameId,
+            MobName = target.Mobs[0].Name,
             TerritoryId = area.TerritoryTypeId,
             AreaX = area.Centre.X,
             AreaZ = area.Centre.Z,
@@ -619,8 +630,15 @@ public sealed class FarmSession
         var from = spotIndex % area.Spots.Count;
         clearedAt[from] = DateTime.UtcNow;
 
-        var expected = observations.For(mob.BNpcNameId, area.TerritoryTypeId).TypicalRepopulation()
-                       ?? TimeSpan.FromSeconds(90);
+        // The soonest any of them comes back, since a spot with something on it
+        // is worth returning to whichever of them is standing there. Nothing
+        // learnt yet leaves the usual guess.
+        var expected = target.BNpcNameIds
+                           .Select(id => observations.Known(id, area.TerritoryTypeId)?.TypicalRepopulation())
+                           .Where(typical => typical is not null)
+                           .Select(typical => typical!.Value)
+                           .DefaultIfEmpty(TimeSpan.FromSeconds(90))
+                           .Min();
 
         var here = objects.LocalPlayer?.Position ?? area.Centre;
         var states = area.Spots
@@ -680,7 +698,10 @@ public sealed class FarmSession
         if (clearedAt.Remove(spotIndex % area.Spots.Count, out var clearedWhen))
         {
             var taken = DateTime.UtcNow - clearedWhen;
-            observations.RecordRepopulation(mob.BNpcNameId, area.TerritoryTypeId, taken);
+
+            // Credited to whatever actually came back, not to every kind the run
+            // is after. The others may still be down.
+            observations.RecordRepopulation(quarry.NameId, area.TerritoryTypeId, taken);
             recorder?.Write("repopulated", new
             {
                 spot = spotIndex % area.Spots.Count,
@@ -690,7 +711,10 @@ public sealed class FarmSession
 
         emptySince = null;
         if (engaged.Add(quarry.GameObjectId))
+        {
             engagedAt[quarry.GameObjectId] = DateTime.UtcNow;
+            engagedName[quarry.GameObjectId] = quarry.NameId;
+        }
 
         if (chosen != quarry.GameObjectId)
         {
@@ -719,7 +743,7 @@ public sealed class FarmSession
         // had been told to and then decided it was still too far, forever.
         if (distance > EngageRange)
         {
-            Status = $"going to a {mob.Name}, {distance:F0}y away";
+            Status = $"going to a {target.NameOf(quarry.NameId)}, {distance:F0}y away";
 
             // Stop a little inside reach so arriving is unambiguous rather than
             // a question of rounding.
@@ -769,7 +793,7 @@ public sealed class FarmSession
         if (targets.Target?.GameObjectId != quarry.GameObjectId)
             targets.Target = quarry;
 
-        Status = $"killing a {mob.Name}, {Nearby(player)} in sight";
+        Status = $"killing a {target.NameOf(quarry.NameId)}, {Nearby(player)} in sight";
 
         // Within reach by the time we get here, so stand still and let the
         // rotation work rather than shuffling closer.
@@ -945,7 +969,7 @@ public sealed class FarmSession
     /// <summary>How many of the quarry are in sight, for saying so.</summary>
     private int Nearby(IPlayerCharacter player) =>
         objects.OfType<IBattleNpc>()
-            .Count(npc => npc.NameId == mob.BNpcNameId
+            .Count(npc => nameIds.Contains(npc.NameId)
                           && !npc.IsDead
                           && npc.CurrentHp > 0
                           && Vector3.Distance(npc.Position, player.Position) <= VisionRadius);
@@ -977,9 +1001,10 @@ public sealed class FarmSession
         lastRejection = DateTime.UtcNow;
 
         var rejected = objects.OfType<IBattleNpc>()
-            .Where(npc => npc.NameId == mob.BNpcNameId)
+            .Where(npc => nameIds.Contains(npc.NameId))
             .Select(npc => new
             {
+                what = npc.NameId,
                 away = Math.Round(Vector3.Distance(npc.Position, player.Position), 1),
                 why = npc.IsDead || npc.CurrentHp == 0 ? "dead"
                     : npc.BattleNpcKind != BattleNpcSubKind.Combatant ? "not a combatant"
@@ -1006,7 +1031,7 @@ public sealed class FarmSession
                 continue;
             if (npc.BattleNpcKind != BattleNpcSubKind.Combatant)
                 continue;
-            if (npc.NameId != mob.BNpcNameId)
+            if (!nameIds.Contains(npc.NameId))
                 continue;
             if (npc.IsDead || npc.CurrentHp == 0)
                 continue;
@@ -1048,11 +1073,14 @@ public sealed class FarmSession
         {
             engaged.Remove(id);
             kills++;
-            observations.RecordKill(mob.BNpcNameId, area.TerritoryTypeId);
+
+            if (engagedName.Remove(id, out var what))
+                observations.RecordKill(what, area.TerritoryTypeId);
 
             recorder?.Write("kill", new
             {
                 n = kills,
+                what,
                 took = engagedAt.Remove(id, out var since)
                     ? Math.Round((DateTime.UtcNow - since).TotalSeconds, 1)
                     : (double?)null,

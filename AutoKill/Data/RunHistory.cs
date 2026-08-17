@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using AutoKill.Core;
 using Dalamud.Plugin.Services;
 
 namespace AutoKill.Data;
@@ -14,6 +16,19 @@ public sealed class RunRecord
 {
     public DateTime When { get; set; }
 
+    /// <summary>
+    /// What was killed, which is more than one kind when the run took a whole
+    /// field rather than a species.
+    /// </summary>
+    public List<uint> MobIds { get; set; } = [];
+
+    public List<string> MobNames { get; set; } = [];
+
+    /// <summary>
+    /// The first of them, as runs were recorded before a run could go after
+    /// several kinds at once. Written as well as read so a file written now
+    /// still says something to a version that only knows about one mob.
+    /// </summary>
     public uint MobId { get; set; }
 
     public string MobName { get; set; } = string.Empty;
@@ -40,6 +55,16 @@ public sealed class RunRecord
     public Dictionary<uint, int> ItemTargets { get; set; } = [];
 
     public bool RequireAll { get; set; }
+
+    /// <summary>What this run went after, however old the record is.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<uint> Mobs =>
+        MobIds.Count > 0 ? MobIds : MobId == 0 ? [] : [MobId];
+
+    /// <summary>The same, in words.</summary>
+    [JsonIgnore]
+    public string Named =>
+        MobNames.Count > 0 ? Phrases.List(MobNames) : MobName;
 }
 
 /// <summary>Finished runs, kept so they can be looked at and done again.</summary>

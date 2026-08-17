@@ -81,25 +81,36 @@ public class FarmSpotsTests
     {
         // Spots have to be grouped into areas without losing which spots went
         // where, because an area is patrolled by visiting its members.
-        var groups = FarmSpots.Group([At(0, 0), At(10, 0), At(500, 0)], 30f);
+        var groups = FarmSpots.GroupIndices([At(0, 0), At(10, 0), At(500, 0)], 30f);
 
         Assert.Equal(2, groups.Count);
-        Assert.Equal(2, groups[0].Count);
-        Assert.Single(groups[1]);
-        Assert.Contains(At(10, 0), groups[0]);
+        Assert.Equal([0, 1], groups[0]);
+        Assert.Equal([2], groups[1]);
     }
 
     [Fact]
     public void GroupingReturnsNothingForNoPoints()
     {
-        Assert.Empty(FarmSpots.Group([], 30f));
+        Assert.Empty(FarmSpots.GroupIndices([], 30f));
     }
 
     [Fact]
     public void GroupsAreSortedBySizeDescending()
     {
-        var groups = FarmSpots.Group([At(0, 0), At(500, 0), At(505, 0), At(510, 0)], 30f);
+        var groups = FarmSpots.GroupIndices([At(0, 0), At(500, 0), At(505, 0), At(510, 0)], 30f);
         Assert.Equal([3, 1], groups.Select(g => g.Count));
+    }
+
+    /// <summary>
+    /// Two things can stand in exactly the same place, which is ordinary once
+    /// the spots of several mobs are put together. Neither may be lost.
+    /// </summary>
+    [Fact]
+    public void PointsAtTheSamePositionAreBothInTheGroup()
+    {
+        var groups = FarmSpots.GroupIndices([At(10, 10), At(10, 10)], 30f);
+
+        Assert.Equal([0, 1], Assert.Single(groups));
     }
 
     [Fact]

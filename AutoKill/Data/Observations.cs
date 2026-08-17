@@ -108,7 +108,15 @@ public sealed class Observations
         Save();
     }
 
-    public MobObservations For(uint bNpcNameId, uint territoryId)
+    /// <summary>
+    /// What has been learnt about a mob, or nothing. Asking never invents an
+    /// entry, so a run that goes after several kinds and only ever meets one
+    /// does not fill the Learned tab with rows about mobs it never saw.
+    /// </summary>
+    public MobObservations? Known(uint bNpcNameId, uint territoryId) =>
+        entries.GetValueOrDefault($"{bNpcNameId}:{territoryId}");
+
+    private MobObservations For(uint bNpcNameId, uint territoryId)
     {
         var key = $"{bNpcNameId}:{territoryId}";
         if (entries.TryGetValue(key, out var found))

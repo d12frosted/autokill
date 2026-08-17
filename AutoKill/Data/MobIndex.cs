@@ -7,40 +7,6 @@ using LuminaSupplemental.Excel.Services;
 
 namespace AutoKill.Data;
 
-/// <summary>Somewhere a mob can be farmed, and how thickly it spawns there.</summary>
-/// <param name="Position">Where to path to, in world coordinates.</param>
-/// <param name="MapPosition">
-/// The same place in map coordinates. This is the pair the game shows and the
-/// only one worth putting in front of a player, since it is what the map, the
-/// minimap and every guide are written in.
-/// </param>
-public sealed record FarmLocation(
-    uint TerritoryTypeId,
-    string ZoneName,
-    Vector3 Position,
-    Vector2 MapPosition,
-    int SpawnCount,
-    ushort Level);
-
-/// <summary>
-/// A stretch of ground worth farming, and the spots inside it.
-/// </summary>
-/// <remarks>
-/// A single spot is not how anyone farms. Mobs of one kind are spread over a
-/// field in several loose knots, and the way to clear them is a circuit rather
-/// than standing on one knot waiting. So spots that are close enough to patrol
-/// between are gathered into an area, and the area is what gets chosen.
-/// </remarks>
-public sealed record FarmArea(
-    uint TerritoryTypeId,
-    string ZoneName,
-    Vector3 Centre,
-    Vector2 MapCentre,
-    IReadOnlyList<FarmLocation> Spots)
-{
-    public int SpawnCount => Spots.Sum(s => s.SpawnCount);
-}
-
 /// <summary>What turns world coordinates into the ones the map shows.</summary>
 internal readonly record struct MapProjection(ushort SizeFactor, short OffsetX, short OffsetY);
 
@@ -80,6 +46,10 @@ public sealed class MobIndex
     private readonly Dictionary<uint, ushort> droppableItemIcons;
     private readonly Dictionary<uint, string> zoneNames;
     private readonly Dictionary<uint, MapProjection> projections;
+
+    // Fields worked out on demand and kept, keyed by the mobs they were worked
+    // out for. Drawn from the window thread only.
+    private readonly Dictionary<string, IReadOnlyList<FarmTarget>> fields = [];
 
     private MobIndex(
         Dictionary<uint, MobEntry> byNameId,
@@ -275,7 +245,7 @@ public sealed class MobIndex
                 nameId,
                 label,
                 baseIds.GetValueOrDefault(nameId)?.ToList() ?? [],
-                IntoAreas(locations),
+                FarmAreas.IntoAreas(locations, AreaRadius),
                 dropsByMob.GetValueOrDefault(nameId)?.ToList() ?? []);
         }
 
@@ -286,39 +256,6 @@ public sealed class MobIndex
 
         return new MobIndex(
             byNameId, mobsByItem, droppableItemNames, droppableItemIcons, zoneNames, projections);
-    }
-
-    /// <summary>
-    /// Gather spots into the areas they belong to, one territory at a time.
-    /// Coordinates only compare within a territory, and no circuit crosses one.
-    /// </summary>
-    private static IReadOnlyList<FarmArea> IntoAreas(List<FarmLocation> spots)
-    {
-        var areas = new List<FarmArea>();
-
-        foreach (var byTerritory in spots.GroupBy(s => s.TerritoryTypeId))
-        {
-            var inTerritory = byTerritory.ToList();
-            var centres = inTerritory.Select(s => s.Position).ToList();
-
-            foreach (var group in FarmSpots.Group(centres, AreaRadius))
-            {
-                var members = group
-                    .Select(point => inTerritory.First(s => s.Position == point))
-                    .OrderByDescending(s => s.SpawnCount)
-                    .ToList();
-
-                var first = members[0];
-                areas.Add(new FarmArea(
-                    first.TerritoryTypeId,
-                    first.ZoneName,
-                    new Vector3(group.Average(p => p.X), group.Average(p => p.Y), group.Average(p => p.Z)),
-                    new Vector2(members.Average(s => s.MapPosition.X), members.Average(s => s.MapPosition.Y)),
-                    members));
-            }
-        }
-
-        return areas.OrderByDescending(a => a.SpawnCount).ToList();
     }
 
     public MobEntry? Get(uint bNpcNameId) => byNameId.GetValueOrDefault(bNpcNameId);
@@ -408,6 +345,50 @@ public sealed class MobIndex
             .OrderByDescending(mob => mob.Farmable)
             .ThenByDescending(mob => mob.Areas.Count > 0 ? mob.Areas[0].SpawnCount : 0)
             .ThenByDescending(mob => mob.Areas.Sum(a => a.SpawnCount))
+            .ToList();
+    }
+
+    /// <summary>
+    /// The same mobs as places rather than as species: every field where
+    /// something dropping this item stands, thickest first, each carrying all
+    /// the kinds standing in it.
+    /// </summary>
+    /// <remarks>
+    /// Someone searching for an item wants the item. Three kinds of petalouda
+    /// drop the same scales in the same two fields in Elpis, and offering them
+    /// one at a time means whichever is picked, two thirds of the field gets
+    /// flown past.
+    /// </remarks>
+    public IReadOnlyList<FarmTarget> FieldsDropping(uint itemId) =>
+        Fields(MobsDropping(itemId).Where(mob => mob.Farmable).ToList());
+
+    /// <summary>
+    /// Any set of mobs as the fields they share, so ground held by several of
+    /// them is one place to go.
+    /// </summary>
+    public IReadOnlyList<FarmTarget> Fields(IReadOnlyList<MobEntry> mobs)
+    {
+        if (mobs.Count == 0)
+            return [];
+
+        // Asked once per frame while a list is on screen, and clustering every
+        // spot of every mob that drops something common is far too much work to
+        // do sixty times a second. Nothing here changes after loading, so the
+        // answer keeps.
+        var key = string.Join(',', mobs.Select(mob => mob.BNpcNameId).Order());
+        if (fields.TryGetValue(key, out var known))
+            return known;
+
+        var spots = mobs
+            .Select(mob => new MobSpots(
+                mob.BNpcNameId,
+                mob.Areas.SelectMany(area => area.Spots).ToList()))
+            .ToList();
+
+        return fields[key] = FarmAreas.Share(spots, AreaRadius)
+            .Select(field => new FarmTarget(
+                field.BNpcNameIds.Select(id => byNameId[id]).ToList(),
+                field.Area))
             .ToList();
     }
 }

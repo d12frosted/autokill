@@ -17,10 +17,16 @@ of service and people do lose accounts for it. Your call.
 
 ## What it does
 
-**Find something to farm.** Search by mob name, or search for an item and see which mobs
-drop it, with icons, zones and how thickly each place spawns. Mobs that drop something but
+**Find something to farm.** Search by mob name, or search for an item and see where to go
+for it, with icons, zones and how thickly each place spawns. Mobs that drop something but
 have nowhere recorded to find them are still listed, and say so, rather than silently
 missing.
+
+**Kill everything in the field that drops it.** Three kinds of petalouda drop the same
+scales and stand in the same two fields in Elpis. Searching by item offers the field, not
+the species, so the run kills all three instead of flying past two of them and waiting on
+one respawn timer. One kind on its own is still there under each field if that is what you
+want.
 
 **Or start from a crafting list.** With Artisan installed, By drop offers your crafting
 lists. Pick one and it shows the materials a mob can supply, how many are in your bags
