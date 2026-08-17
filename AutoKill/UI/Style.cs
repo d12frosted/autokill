@@ -1,6 +1,6 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
-using Dalamud.Interface.Utility.Raii;
+using Dalamud.Interface;
 
 namespace AutoKill.UI;
 
@@ -98,11 +98,41 @@ internal static class Style
     public static void Place(string text) => ImGui.TextColored(Accent, text);
 
     /// <summary>
-    /// A full width row that can be picked. The label is what it does, so
-    /// there is no button beside it repeating the word "choose".
+    /// A full width row that can be picked, marked with what picking it does.
     /// </summary>
-    public static bool Pick(string label) =>
-        ImGui.Selectable(label, false, ImGuiSelectableFlags.None);
+    /// <remarks>
+    /// The label alone reads as a statement rather than as a control: text on a
+    /// row looks like text on a row, and nothing about it says it can be
+    /// pressed. A blade in front of it says both that it is live and what it is
+    /// for, which no wording of the label can do without becoming a caption.
+    ///
+    /// The row is drawn first and the mark and label over it, so the whole
+    /// width answers to the mouse rather than just the words.
+    /// </remarks>
+    public static bool Pick(string label, string? tip = null, FontAwesomeIcon mark = FontAwesomeIcon.Khanda)
+    {
+        var start = ImGui.GetCursorPos();
+
+        var picked = ImGui.Selectable($"##{label}", false, ImGuiSelectableFlags.None);
+        var hovered = ImGui.IsItemHovered();
+        var after = ImGui.GetCursorPos();
+
+        ImGui.SetCursorPos(start);
+
+        ImGui.PushFont(UiBuilder.IconFont);
+        ImGui.TextColored(hovered ? Accent : Muted, mark.ToIconString());
+        ImGui.PopFont();
+
+        ImGui.SameLine();
+        ImGui.TextUnformatted(label);
+
+        ImGui.SetCursorPos(after);
+
+        if (hovered && tip is not null)
+            ImGui.SetTooltip(tip);
+
+        return picked;
+    }
 
     public static void Gap(float y = 6f) => ImGui.Dummy(new Vector2(0f, y));
 

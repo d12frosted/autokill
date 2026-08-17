@@ -225,10 +225,13 @@ public sealed class MainWindow : Window
         {
             using var areaId = ImRaii.PushId($"{area.Centre.X:F0}-{area.Centre.Z:F0}");
 
-            if (Style.Pick($"({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})"))
+            if (Style.Pick(
+                    $"({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})",
+                    $"Go here for {target.Name}, {target.Remaining} still owed."))
+            {
                 PlanHunt(mobs, target, area);
+            }
 
-            Style.Explain($"Go here for {target.Name}, {target.Remaining} still owed.");
             Style.Trailing(Density(area));
         }
 
@@ -254,10 +257,13 @@ public sealed class MainWindow : Window
 
         if (fates.Running(target.FateId) is { } running)
         {
-            if (Style.Pick($"{named} is up now"))
+            if (Style.Pick(
+                    $"{named} is up now",
+                    "Goes to where the FATE actually is, rather than where the mob was recorded."))
+            {
                 PlanHunt(mobs, target, mobs.AreaAt(target.TerritoryTypeId, running.Position));
+            }
 
-            Style.Explain("Goes to where the FATE actually is, rather than where the mob was recorded.");
             Style.Trailing($"{running.Progress}% done");
             return;
         }
@@ -917,12 +923,12 @@ public sealed class MainWindow : Window
 
             // The row says what picking it does, so it needs no button beside
             // it saying "choose" as well.
-            if (Style.Pick(field.Name))
+            if (Style.Pick(field.Name, field.Shared
+                    ? $"Go here and kill all {field.Mobs.Count} of them."
+                    : "Go here and kill it."))
+            {
                 Plan(field);
-
-            Style.Explain(field.Shared
-                ? $"Farm all {field.Mobs.Count} of them here."
-                : $"Farm it here.");
+            }
 
             if (field.Shared)
                 DrawOnlyOne(field);
@@ -1110,10 +1116,9 @@ public sealed class MainWindow : Window
         {
             using var id = ImRaii.PushId($"{mob.BNpcNameId}-{area.TerritoryTypeId}-{area.Centre.X:F0}");
 
-            if (Style.Pick(Where(area)))
+            if (Style.Pick(Where(area), $"Go here and kill {mob.Name}."))
                 Plan(new FarmTarget(mob, area));
 
-            Style.Explain($"Farm {mob.Name} here.");
             Style.Trailing(Density(area));
         }
 
