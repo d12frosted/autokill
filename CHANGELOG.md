@@ -37,6 +37,26 @@ reading the diff. Dates are when the tag went out.
   mark is not up, the run patrols its spawn points until it is, which is what
   hunting one looks like by hand.
 
+### Changed
+
+- **The window was reworked.** Every screen now puts names on the left and
+  numbers flush right, so counts form a column you can compare down the page
+  instead of reading one row at a time. Rows that can be picked say what
+  picking them does and carry a blade to show they are live, which retired the
+  buttons that sat next to a label repeating the word "choose".
+
+  Mob names are capitalised. The sheets keep them in lower case, which is fine
+  in a target bar and unreadable in a list of twenty. Mobs sharing a field are
+  named by what tells them apart, with the ending they share said once, so
+  "petalouda" is no longer written three times on one line.
+
+  A crafting list now shows what is already gathered dimmed and marked done,
+  and what is still owed at full strength with the count to go, so the list can
+  be answered by looking rather than by subtracting.
+
+  A run draws its kill, time and item goals as bars rather than as two numbers
+  with a slash.
+
 ### Fixed
 
 - **Wrath keeps fighting after a job change.** Changing job ends Wrath's lease, and the
