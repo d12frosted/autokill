@@ -74,7 +74,14 @@ internal static class Style
     /// cannot be compared without reading each one. Against the right edge they
     /// form a column, which is the whole reason to put them there.
     /// </remarks>
-    public static void Trailing(string text)
+    public static void Trailing(string text) => Trailing(text, Muted);
+
+    /// <summary>
+    /// The same, in a colour that says something about the number: what is
+    /// still to do reads differently from what is finished with, without
+    /// anybody having to read the number to find out which it is.
+    /// </summary>
+    public static void Trailing(string text, Vector4 colour)
     {
         // Measured from the window's own right edge rather than from where the
         // last thing ended. A row picked out by a full width selectable ends at
@@ -82,7 +89,30 @@ internal static class Style
         var right = ImGui.GetWindowContentRegionMax().X - ImGui.CalcTextSize(text).X;
 
         ImGui.SameLine(right);
-        ImGui.TextColored(Muted, text);
+        ImGui.TextColored(colour, text);
+    }
+
+    /// <summary>
+    /// Trailing numbers with a mark in front of them, for a state worth seeing
+    /// before the number is read.
+    /// </summary>
+    public static void Trailing(FontAwesomeIcon mark, string text, Vector4 colour)
+    {
+        ImGui.PushFont(UiBuilder.IconFont);
+        var marked = ImGui.CalcTextSize(mark.ToIconString()).X;
+        ImGui.PopFont();
+
+        var gap = ImGui.GetStyle().ItemSpacing.X;
+        var right = ImGui.GetWindowContentRegionMax().X
+                    - (marked + gap + ImGui.CalcTextSize(text).X);
+
+        ImGui.SameLine(right);
+        ImGui.PushFont(UiBuilder.IconFont);
+        ImGui.TextColored(colour, mark.ToIconString());
+        ImGui.PopFont();
+
+        ImGui.SameLine();
+        ImGui.TextColored(colour, text);
     }
 
     /// <summary>Detail worth having but not worth a line of its own.</summary>

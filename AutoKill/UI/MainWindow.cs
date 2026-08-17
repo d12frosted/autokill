@@ -3,6 +3,7 @@ using AutoKill.Core;
 using AutoKill.Data;
 using AutoKill.Farming;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Textures;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
@@ -1073,18 +1074,30 @@ public sealed class MainWindow : Window
 
             var held = Bags.CountOf(material.ItemId);
             var missing = CraftingLists.StillNeeded(material.Required, held);
+            var enough = missing == 0;
 
             DrawIcon(material.Icon);
+
+            // What is done with steps back: dimmed, and marked so the state is
+            // seen before the numbers are read. What is still owed keeps full
+            // strength and says how much in the colour of the thing to act on.
+            if (enough)
+                ImGui.PushStyleColor(ImGuiCol.Text, Style.Muted);
+
             if (ImGui.Selectable($"{material.Name}##material"))
                 Want(material.ItemId, material.Name, Math.Max(1, missing));
 
-            Style.Explain(missing == 0
+            if (enough)
+                ImGui.PopStyleColor();
+
+            Style.Explain(enough
                 ? "You have enough of these already."
                 : $"Look for {missing} more.");
 
-            Style.Trailing(missing == 0
-                ? $"{held} / {material.Required}   enough"
-                : $"{held} / {material.Required}   {missing} to go");
+            if (enough)
+                Style.Trailing(FontAwesomeIcon.Check, $"{held} / {material.Required}", Style.Good);
+            else
+                Style.Trailing($"{held} / {material.Required}   {missing} to go", Style.Accent);
         }
 
         if (rest > 0)
