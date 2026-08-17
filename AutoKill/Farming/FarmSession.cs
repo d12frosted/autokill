@@ -62,6 +62,23 @@ public sealed class FarmSession
     private static readonly TimeSpan RejectionInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan TeleportCooldown = TimeSpan.FromSeconds(10);
 
+    // How long a chosen quarry may show no sign of getting nearer or of dying
+    // before the run stops believing in it. Long enough to cover summoning a
+    // mount, which is a few seconds of standing still on the way to something.
+    private static readonly TimeSpan StallPatience = TimeSpan.FromSeconds(10);
+
+    // How long one given up on stays passed over, as long as it stays put.
+    private static readonly TimeSpan GiveUpCooldown = TimeSpan.FromSeconds(90);
+
+    // The same for a spot being travelled to, but slower. Working out a route
+    // across a large zone takes a moment, and waiting on one is not the same as
+    // being unable to get there.
+    private static readonly TimeSpan TravelPatience = TimeSpan.FromSeconds(15);
+
+    // Long, because a spot given up on and then tried again costs a whole
+    // journey to find out nothing has changed.
+    private static readonly TimeSpan SpotGiveUpCooldown = TimeSpan.FromMinutes(5);
+
     private readonly FarmTarget target;
     private readonly FarmArea area;
 
@@ -95,6 +112,15 @@ public sealed class FarmSession
     // to a species rather than to the run as a whole.
     private readonly Dictionary<ulong, uint> engagedName = [];
 
+    // Whether the one being chased is going anywhere, and the ones that were
+    // not. Named apart from the spot watch below: that one times a patch of
+    // ground, this one judges a single mob.
+    private readonly QuarryWatch quarryWatch = new(StallPatience, GiveUpCooldown);
+
+    // The same question asked of the journey rather than of the fight: is the
+    // spot we set off for one we are ever going to reach.
+    private readonly TravelWatch travelWatch = new(TravelPatience, SpotGiveUpCooldown);
+
     private DateTime lastMove = DateTime.MinValue;
     private DateTime lastMountAction = DateTime.MinValue;
     private bool flagged;
@@ -103,6 +129,7 @@ public sealed class FarmSession
     private int spotIndex;
     private DateTime? emptySince;
     private ulong chosen;
+    private bool closeIn;
     private Vector3 lastPosition;
     private DateTime? stuckSince;
     private bool stuckReported;
@@ -187,6 +214,10 @@ public sealed class FarmSession
                 huntRadius = HuntRadius,
                 visionRadius = VisionRadius,
                 leashRadius = LeashRadius,
+                stallPatience = StallPatience.TotalSeconds,
+                giveUpCooldown = GiveUpCooldown.TotalSeconds,
+                travelPatience = TravelPatience.TotalSeconds,
+                spotGiveUpCooldown = SpotGiveUpCooldown.TotalSeconds,
             },
             targets = conditions.Conditions.Select(c => c.GetType().Name),
         });
@@ -453,6 +484,7 @@ public sealed class FarmSession
     {
         if (clientState.TerritoryType == area.TerritoryTypeId)
         {
+            travelWatch.SetOff();
             Phase = FarmPhase.Travelling;
             return;
         }
@@ -520,6 +552,39 @@ public sealed class FarmSession
         {
             navmesh.Stop();
             Phase = FarmPhase.Hunting;
+            return;
+        }
+
+        // Is the journey going anywhere. Sampled from here rather than from
+        // beside the steering below so that time spent mounting counts as time
+        // spent not arriving, which is what it is. The wait on the navmesh above
+        // returns before this, since a mesh still building is a reason to stand
+        // still rather than a spot that cannot be reached.
+        var travel = travelWatch.Watch(spotIndex % area.Spots.Count, remaining, DateTime.UtcNow);
+
+        if (travel.GiveUp)
+        {
+            GiveUpOnSpot(remaining);
+            return;
+        }
+
+        if (travel.Stalled)
+        {
+            recorder?.Write("re-route", new
+            {
+                spot = spotIndex % area.Spots.Count,
+                remaining = Math.Round(remaining, 1),
+                flying = PlayerActions.IsFlying(condition),
+            });
+
+            // Ask the mesh where the spot is all over again. Spawn data has no
+            // height, so a spot is a guess dropped onto the floor, and a guess
+            // made while the mesh was still loading falls back to standing
+            // height and can be somewhere solid. Then drop the route built on
+            // it, so the next tick works out a fresh one.
+            resolvedSpot = null;
+            flagged = false;
+            navmesh.Stop();
             return;
         }
 
@@ -619,12 +684,60 @@ public sealed class FarmSession
     }
 
     /// <summary>
+    /// Write this spot off and go somewhere else on the circuit.
+    /// </summary>
+    /// <remarks>
+    /// With nowhere left to go the run ends. An area whose every spot refuses to
+    /// path is one the position data is wrong about, and flying at a cliff for
+    /// an hour is not a better answer than saying so.
+    /// </remarks>
+    private void GiveUpOnSpot(float remaining)
+    {
+        var from = spotIndex % area.Spots.Count;
+
+        recorder?.Write("gave-up-spot", new
+        {
+            spot = from,
+            remaining = Math.Round(remaining, 1),
+            flying = PlayerActions.IsFlying(condition),
+        });
+
+        navmesh.Stop();
+
+        if (Reachable().Count == 0)
+        {
+            Finish(area.Spots.Count > 1
+                ? $"no way to any of the {area.Spots.Count} spots"
+                : "no way to the spot");
+            return;
+        }
+
+        Status = $"no way to spot {from + 1}, trying another";
+
+        // Never got there, so nothing about it was emptied. Stamped as cleared
+        // it would be timed like any other spot, and coming back to it once the
+        // cooldown lapsed would file the whole wait as a respawn.
+        AdvanceSpot(cleared: false);
+    }
+
+    /// <summary>The spots still worth setting off for.</summary>
+    private HashSet<int> Reachable()
+    {
+        var now = DateTime.UtcNow;
+        return [.. Enumerable.Range(0, area.Spots.Count).Where(i => !travelWatch.GivenUpOn(i, now))];
+    }
+
+    /// <summary>
     /// Move on to the next knot of the circuit. Going back through travelling
     /// rather than walking there from the hunt is deliberate: travelling already
     /// knows how to mount, fly and flag the map, and the next spot is exactly
     /// the kind of distance that is worth doing all three for.
     /// </summary>
-    private void AdvanceSpot()
+    /// <param name="cleared">
+    /// Whether the spot being left was actually emptied. False when it is being
+    /// written off unreached, which is not a measurement of anything.
+    /// </param>
+    private void AdvanceSpot(bool cleared = true)
     {
         if (area.Spots.Count <= 1)
         {
@@ -633,7 +746,8 @@ public sealed class FarmSession
         }
 
         var from = spotIndex % area.Spots.Count;
-        clearedAt[from] = DateTime.UtcNow;
+        if (cleared)
+            clearedAt[from] = DateTime.UtcNow;
 
         // The soonest any of them comes back, since a spot with something on it
         // is worth returning to whichever of them is standing there. Nothing
@@ -645,6 +759,11 @@ public sealed class FarmSession
                            .DefaultIfEmpty(TimeSpan.FromSeconds(90))
                            .Min();
 
+        // Somewhere there is no way to is not a candidate, however much stands
+        // on it. Without this the circuit routes back to the one spot it has
+        // already proved it cannot reach, every time round.
+        var reachable = Reachable();
+
         var here = objects.LocalPlayer?.Position ?? area.Centre;
         var states = area.Spots
             .Select((spot, i) => new SpotState(
@@ -652,7 +771,16 @@ public sealed class FarmSession
                 spot.SpawnCount,
                 clearedAt.TryGetValue(i, out var when) ? DateTime.UtcNow - when : null,
                 Vector3.Distance(here, spot.Position)))
+            .Where(state => reachable.Contains(state.Index))
             .ToList();
+
+        // Nothing left to choose between, so stay put rather than picking the
+        // spot just written off.
+        if (states.Count == 0)
+        {
+            emptySince = null;
+            return;
+        }
 
         var next = SpotRotation.PickNext(states, from, expected, jitter: 0.25);
 
@@ -681,6 +809,7 @@ public sealed class FarmSession
         watch.Left();
 
         navmesh.Stop();
+        travelWatch.SetOff();
         Phase = FarmPhase.Travelling;
     }
 
@@ -740,15 +869,11 @@ public sealed class FarmSession
         }
 
         emptySince = null;
-        if (engaged.Add(quarry.GameObjectId))
-        {
-            engagedAt[quarry.GameObjectId] = DateTime.UtcNow;
-            engagedName[quarry.GameObjectId] = quarry.NameId;
-        }
 
         if (chosen != quarry.GameObjectId)
         {
             chosen = quarry.GameObjectId;
+            closeIn = false;
             recorder?.Write("target", new
             {
                 id = quarry.GameObjectId,
@@ -765,26 +890,67 @@ public sealed class FarmSession
             ? Horizontally(player.Position, quarry.Position)
             : Vector3.Distance(player.Position, quarry.Position);
 
+        // Whether any of this is working. Being in range is judged on what the
+        // job can attack from rather than on the tightened reach below, because
+        // the question being asked is whether standing close enough to fight
+        // achieved anything.
+        var check = quarryWatch.Watch(
+            quarry.GameObjectId,
+            quarry.Position,
+            distance,
+            quarry.CurrentHp,
+            inRange: distance <= EngageRange,
+            DateTime.UtcNow);
+
+        if (check.GiveUp)
+        {
+            GiveUp(quarry, check, distance);
+            return;
+        }
+
+        if (check.Stalled && !closeIn)
+        {
+            closeIn = true;
+            recorder?.Write("close-in", new
+            {
+                id = quarry.GameObjectId,
+                trouble = check.Trouble.ToString(),
+                away = Math.Round(distance, 1),
+                hp = quarry.CurrentHp,
+            });
+
+            // The route in hand is the one getting nowhere, so drop it and let
+            // the next tick ask for a fresh one to the tighter range.
+            navmesh.Stop();
+        }
+
+        // The edge of a caster's reach is where something in the way costs the
+        // most: far enough off that anything blocks the line, close enough that
+        // the run believes it has arrived and stands there. Walking in to melee
+        // re-routes around whatever it is, and usually brings the line of sight
+        // back with it.
+        var reach = closeIn ? MeleeRange : EngageRange;
+
         // Not yet within reach. Ride if it is worth riding, walk if it is not.
         //
         // The threshold is what this job can attack from, not what is worth
         // mounting for. Routing to within attack range and then judging arrival
         // by the mounting distance meant a ranged job stopped exactly where it
         // had been told to and then decided it was still too far, forever.
-        if (distance > EngageRange)
+        if (distance > reach)
         {
             Status = $"going to a {target.NameOf(quarry.NameId)}, {distance:F0}y away";
 
             // Stop a little inside reach so arriving is unambiguous rather than
             // a question of rounding.
-            var closeTo = EngageRange * 0.8f;
+            var closeTo = reach * 0.8f;
 
             // What is worth mounting for is the ground still to cover, which is
             // the distance less the reach, not the distance itself. Measured the
             // other way, a ranged job that had just dismounted at the edge of
             // its reach would mount again the moment its target shuffled a yalm
             // further off, and spend the fight climbing on and off.
-            if (distance - EngageRange > config.MountDistance)
+            if (distance - reach > config.MountDistance)
                 Approach(player, quarry.Position, closeTo);
             else
                 Steer(quarry.Position, closeTo);
@@ -823,12 +989,64 @@ public sealed class FarmSession
         if (targets.Target?.GameObjectId != quarry.GameObjectId)
             targets.Target = quarry;
 
+        // Counted from here rather than from choosing it. One picked out across
+        // a chasm and never reached is not this run's kill when something else
+        // finishes it, and counting from the choice scored exactly that.
+        if (engaged.Add(quarry.GameObjectId))
+        {
+            engagedAt[quarry.GameObjectId] = DateTime.UtcNow;
+            engagedName[quarry.GameObjectId] = quarry.NameId;
+        }
+
         Status = $"killing a {target.NameOf(quarry.NameId)}, {Nearby(player)} in sight";
 
         // Within reach by the time we get here, so stand still and let the
         // rotation work rather than shuffling closer.
         if (navmesh.Moving)
             navmesh.Stop();
+    }
+
+    /// <summary>
+    /// Leave one alone. Whatever is wrong with it, two tries at it have changed
+    /// nothing, and standing here is costing the run the rest of the field.
+    /// </summary>
+    /// <remarks>
+    /// Nothing more is needed to get the run moving again. Finding a quarry is
+    /// what holds the circuit at a spot, so once every one in sight has been
+    /// given up on the search comes back empty, the patience clock starts, and
+    /// the ordinary business of moving on round the circuit takes over.
+    /// </remarks>
+    private void GiveUp(IBattleNpc quarry, QuarryCheck check, float distance)
+    {
+        recorder?.Write("gave-up", new
+        {
+            id = quarry.GameObjectId,
+            what = quarry.NameId,
+            trouble = check.Trouble.ToString(),
+            away = Math.Round(distance, 1),
+            hp = quarry.CurrentHp,
+        });
+
+        // Never fought, so never ours. Left in, it would be scored as a kill the
+        // moment anything else got to it.
+        engaged.Remove(quarry.GameObjectId);
+        engagedAt.Remove(quarry.GameObjectId);
+        engagedName.Remove(quarry.GameObjectId);
+
+        chosen = 0;
+        closeIn = false;
+        navmesh.Stop();
+
+        // Whatever this spot does next is not a measurement any more. Something
+        // is standing on it that the run cannot take, so it is neither empty nor
+        // occupied in the sense the timing means, and left alone the wait would
+        // be filed as a respawn once the quarry became worth trying again.
+        watch.Left();
+
+        var what = target.NameOf(quarry.NameId);
+        Status = check.Trouble == QuarryTrouble.OutOfSight
+            ? $"nothing lands on that {what}, leaving it"
+            : $"no way over to that {what}, leaving it";
     }
 
     /// <summary>
@@ -853,6 +1071,7 @@ public sealed class FarmSession
             if (Vector3.Distance(player.Position, spot) > ArrivalRange)
             {
                 emptySince = null;
+                travelWatch.SetOff();
                 Phase = FarmPhase.Travelling;
                 return;
             }
@@ -1045,6 +1264,7 @@ public sealed class FarmSession
                 why = npc.IsDead || npc.CurrentHp == 0 ? "dead"
                     : npc.BattleNpcKind != BattleNpcSubKind.Combatant ? "not a combatant"
                     : npc.TargetObject is not null && npc.TargetObjectId != player.GameObjectId ? "someone else's"
+                    : quarryWatch.GivenUpOn(npc.GameObjectId, npc.Position, DateTime.UtcNow) ? "given up on"
                     : "out of range",
             })
             .OrderBy(r => r.away)
@@ -1060,6 +1280,7 @@ public sealed class FarmSession
     {
         IBattleNpc? best = null;
         var bestDistance = float.MaxValue;
+        var now = DateTime.UtcNow;
 
         foreach (var obj in objects)
         {
@@ -1073,6 +1294,11 @@ public sealed class FarmSession
                 continue;
             // Someone else's fight is not ours to steal.
             if (npc.TargetObject is not null && npc.TargetObjectId != player.GameObjectId)
+                continue;
+            // One the run already got nowhere with. Skipped here rather than
+            // anywhere else because this is what the circuit reads as an empty
+            // spot, which is the only thing that gets it moving again.
+            if (quarryWatch.GivenUpOn(npc.GameObjectId, npc.Position, now))
                 continue;
             var fromSpot = Vector3.Distance(npc.Position, spot);
             var fromPlayer = Vector3.Distance(npc.Position, player.Position);

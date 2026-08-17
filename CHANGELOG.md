@@ -59,6 +59,48 @@ reading the diff. Dates are when the tag went out.
 
 ### Fixed
 
+- **A mob it cannot get to no longer ends the run.** Targets are picked by
+  straight line distance, which says nothing about whether there is a way there.
+  Across a gorge, up a cliff, on a rock the navmesh does not cover, or simply
+  behind something solid, the run would head for one forever: the route ends
+  short of it, picking again picks the same one, and because something was
+  always in sight the circuit never decided the spot was done and moved on. A
+  full field and hours on the clock, spent on one mob.
+
+  It now watches whether anything is actually happening. Either the distance is
+  coming down or the target's health is, and if neither has for ten seconds it
+  walks in closer, which re-routes around whatever is in the way and usually
+  takes the line of sight back with it. If that changes nothing either, it
+  leaves that one alone for a while and gets on with the rest of the field. One
+  that wanders off from wherever it was abandoned is worth trying again at once.
+
+  This makes no attempt to tell the reasons apart. No path, no line of sight, a
+  snag on the scenery and a rotation sitting idle all look identical from the
+  outside, and none of them is worth standing still for.
+
+- **A spot it cannot get to no longer ends the run either.** Spawn positions
+  carry no height, so a spot is a pair of coordinates dropped onto whatever the
+  navmesh says is underneath. Sometimes there is nothing sensible underneath:
+  the point lands inside a cliff, on a ledge with no way up, or out over water.
+  The route then ends short and the run hangs in the air next to it, or is
+  refused and the run asks again every two seconds until you notice.
+
+  A journey that has not got any closer for fifteen seconds now asks the mesh
+  where the spot is all over again and takes a fresh route to it, which is
+  enough when the first answer was worked out while the zone was still loading.
+  If that gets no further either, the spot is written off and the circuit goes
+  somewhere else, coming back to it only after five minutes in case the trouble
+  was the approach rather than the place.
+
+  When there is nowhere left to go the run stops and says so, naming how many
+  spots it could not reach, rather than flying at a cliff until the time limit
+  runs out.
+
+- **Kills are counted from the fight, not from the choice.** A mob picked out
+  and then never reached was still on the books, so when anything else killed it
+  the run scored it and counted it towards the goal. It is only counted now once
+  the run is in range and swinging at it.
+
 - **The places farmed hardest now learn something.** How long a spot takes to
   come back was only ever measured on the return trip: leave a spot, come back,
   see how long it had been. A mob with a single recorded spot never leaves, so
