@@ -31,7 +31,13 @@ public sealed record FarmTarget(IReadOnlyList<MobEntry> Mobs, FarmArea Area)
     /// full rather than counted, because "three kinds of mob" tells nobody
     /// whether the right three were picked.
     /// </summary>
-    public string Name => Phrases.List(Mobs.Select(mob => mob.Name).ToList());
+    public string Name => Phrases.Kinds(Mobs.Select(mob => mob.Name).ToList());
+
+    /// <summary>
+    /// What tells them apart, for putting each one on a control of its own.
+    /// Three buttons reading "petalouda" would not be a choice.
+    /// </summary>
+    public IReadOnlyList<string> Distinct => Phrases.Split(Mobs.Select(mob => mob.Name).ToList()).Distinct;
 
     /// <summary>Which of them this is, for talking about the one in front of you.</summary>
     public string NameOf(uint bNpcNameId) =>

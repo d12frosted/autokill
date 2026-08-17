@@ -78,23 +78,28 @@ public sealed class MainWindow : Window
         this.saveConfig = saveConfig;
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(520, 400),
+            // Wide enough that a row's name and its counts do not have to fight
+            // for the same space, which is what makes a list readable at a
+            // glance rather than word by word.
+            MinimumSize = new Vector2(560, 420),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
         };
     }
 
     public override void Draw()
     {
+        using var style = Style.Window();
+
         var mobs = index();
         if (mobs is null)
         {
-            ImGui.TextUnformatted("Loading mob data...");
+            Style.Muffled("Loading mob data...");
             return;
         }
 
         if (farming.Blocker is { } blocker)
         {
-            ImGui.TextColored(new Vector4(1f, 0.6f, 0.3f, 1f), blocker);
+            ImGui.TextColored(Style.Bad, blocker);
             ImGui.Separator();
         }
 
@@ -151,9 +156,9 @@ public sealed class MainWindow : Window
         var bills = hunts.Obtained();
         if (bills.Count == 0)
         {
-            ImGui.Spacing();
-            ImGui.TextDisabled("No hunt bills in hand.");
-            ImGui.TextDisabled("Pick some up from a hunt board and they turn up here.");
+            Style.Gap();
+            Style.Muffled("No hunt bills in hand.");
+            Style.Muffled("Pick some up from a hunt board and they turn up here.");
             return;
         }
 
@@ -163,12 +168,9 @@ public sealed class MainWindow : Window
 
         foreach (var bill in bills)
         {
-            ImGui.TextUnformatted(bill.Name);
+            Style.Place(bill.Name);
             if (bill.Elite)
-            {
-                ImGui.SameLine();
-                ImGui.TextDisabled("one mark, killed once");
-            }
+                Style.Trailing("one mark, killed once");
 
             using var indent = ImRaii.PushIndent();
 
@@ -178,7 +180,7 @@ public sealed class MainWindow : Window
                 DrawHuntTarget(mobs, target);
             }
 
-            ImGui.Separator();
+            Style.Gap(2f);
         }
     }
 
@@ -188,15 +190,18 @@ public sealed class MainWindow : Window
 
         if (target.Done)
         {
-            ImGui.TextDisabled($"{target.Name}  {target.Needed}/{target.Needed}  done");
+            Style.Muffled(target.Name);
+            ImGui.SameLine();
+            ImGui.TextColored(Style.Good, "done");
+            Style.Trailing($"{target.Needed} / {target.Needed}");
             return;
         }
 
         ImGui.TextUnformatted(target.Name);
-        ImGui.SameLine();
-        ImGui.TextDisabled($"{target.Killed}/{target.Needed}   {where}");
+        Style.Trailing($"{target.Killed} / {target.Needed}");
 
         using var indent = ImRaii.PushIndent();
+        Style.Muffled(where);
 
         if (target.Fated)
         {
@@ -212,7 +217,7 @@ public sealed class MainWindow : Window
 
         if (areas.Count == 0)
         {
-            ImGui.TextDisabled("nowhere recorded in that zone");
+            Style.Muffled("nowhere recorded in that zone");
             return;
         }
 
@@ -220,17 +225,15 @@ public sealed class MainWindow : Window
         {
             using var areaId = ImRaii.PushId($"{area.Centre.X:F0}-{area.Centre.Z:F0}");
 
-            if (ImGui.SmallButton("Choose"))
+            if (Style.Pick($"({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})"))
                 PlanHunt(mobs, target, area);
 
-            ImGui.SameLine();
-            ImGui.TextDisabled(
-                $"({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})  {area.SpawnCount} spawns"
-                + (area.Spots.Count > 1 ? $" over {area.Spots.Count} spots" : string.Empty));
+            Style.Explain($"Go here for {target.Name}, {target.Remaining} still owed.");
+            Style.Trailing(Density(area));
         }
 
         if (areas.Count > 2)
-            ImGui.TextDisabled($"... and {areas.Count - 2} more in that zone");
+            Style.Muffled($"and {areas.Count - 2} more in that zone");
     }
 
     /// <summary>
@@ -251,15 +254,15 @@ public sealed class MainWindow : Window
 
         if (fates.Running(target.FateId) is { } running)
         {
-            if (ImGui.SmallButton("Choose"))
+            if (Style.Pick($"{named} is up now"))
                 PlanHunt(mobs, target, mobs.AreaAt(target.TerritoryTypeId, running.Position));
 
-            ImGui.SameLine();
-            ImGui.TextDisabled($"{named} is up now, {running.Progress}% done");
+            Style.Explain("Goes to where the FATE actually is, rather than where the mob was recorded.");
+            Style.Trailing($"{running.Progress}% done");
             return;
         }
 
-        ImGui.TextDisabled(fates.InZone(target.TerritoryTypeId)
+        Style.Muffled(fates.InZone(target.TerritoryTypeId)
             ? $"{named} is not running"
             : $"only while {named} is running");
     }
@@ -297,8 +300,8 @@ public sealed class MainWindow : Window
 
         if (history.Records.Count == 0)
         {
-            ImGui.Spacing();
-            ImGui.TextDisabled("No runs yet.");
+            Style.Gap();
+            Style.Muffled("No runs yet.");
             return;
         }
 
@@ -317,31 +320,37 @@ public sealed class MainWindow : Window
             using var id = ImRaii.PushId(run.When.Ticks.GetHashCode());
 
             var elapsed = TimeSpan.FromSeconds(run.ElapsedSeconds);
-            ImGui.TextUnformatted($"{run.Named}  in {mobs.ZoneName(run.TerritoryId)}");
-            ImGui.TextDisabled(
-                $"{run.When:d MMM HH:mm}   {run.Kills} killed in {elapsed:hh\\:mm\\:ss}   {run.Reason}");
+
+            Style.Place(run.Named);
+            Style.Trailing($"{run.When:d MMM HH:mm}");
+
+            using var indent = ImRaii.PushIndent();
+
+            ImGui.TextUnformatted(mobs.ZoneName(run.TerritoryId));
+            Style.Trailing($"{run.Kills} killed in {elapsed:hh\\:mm\\:ss}");
+            Style.Muffled(run.Reason);
 
             foreach (var (itemId, count) in run.Gained)
             {
                 DrawItemIcon(mobs, itemId);
-                ImGui.TextDisabled($"{count} {mobs.ItemName(itemId)}");
+                Style.Muffled($"{count} {mobs.ItemName(itemId)}");
             }
 
             if (Repeatable(mobs, run) is not null)
             {
-                if (ImGui.SmallButton("Repeat"))
+                if (ImGui.SmallButton("repeat"))
                     Repeat(mobs, run);
             }
             else
             {
-                ImGui.TextDisabled("that area is no longer in the data");
+                Style.Muffled("that ground is no longer in the data");
             }
 
             ImGui.SameLine();
-            if (ImGui.SmallButton("Forget"))
+            if (ImGui.SmallButton("forget"))
                 history.Forget(run);
 
-            ImGui.Separator();
+            Style.Gap(2f);
         }
     }
 
@@ -396,8 +405,8 @@ public sealed class MainWindow : Window
         var entries = observations.Entries.ToList();
         if (entries.Count == 0)
         {
-            ImGui.Spacing();
-            ImGui.TextDisabled("Nothing learnt yet. Farm something and this fills in.");
+            Style.Gap();
+            Style.Muffled("Nothing learnt yet. Farm something and this fills in.");
             return;
         }
 
@@ -406,14 +415,15 @@ public sealed class MainWindow : Window
             observations.ForgetEverything();
 
         ImGui.SameLine();
-        ImGui.TextDisabled($"{entries.Count} place(s) farmed");
+        Style.Trailing($"{entries.Count} place(s) farmed");
         ImGui.Separator();
 
         using var child = ImRaii.Child("##learned", new Vector2(-1, -1));
         if (!child)
             return;
 
-        using var table = ImRaii.Table("##learned-table", 5, ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp);
+        using var table = ImRaii.Table(
+            "##learned-table", 5, ImGuiTableFlags.RowBg | ImGuiTableFlags.SizingStretchProp);
         if (!table)
             return;
 
@@ -429,7 +439,7 @@ public sealed class MainWindow : Window
             using var id = ImRaii.PushId($"{mobId}-{territoryId}");
 
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(mobs.Get(mobId)?.Name ?? $"mob {mobId}");
+            ImGui.TextColored(Style.Accent, mobs.Get(mobId)?.Name ?? $"mob {mobId}");
 
             ImGui.TableNextColumn();
             ImGui.TextUnformatted(mobs.ZoneName(territoryId));
@@ -439,12 +449,18 @@ public sealed class MainWindow : Window
 
             ImGui.TableNextColumn();
             if (what.TypicalRepopulation() is { } typical)
-                ImGui.TextUnformatted($"{typical.TotalSeconds:F0}s  ({what.Repopulated.Count} seen)");
+            {
+                ImGui.TextUnformatted($"{typical.TotalSeconds:F0}s");
+                ImGui.SameLine();
+                Style.Muffled($"({what.Repopulated.Count} seen)");
+            }
             else
-                ImGui.TextDisabled($"not yet ({what.Repopulated.Count}/3)");
+            {
+                Style.Muffled($"not yet ({what.Repopulated.Count}/3)");
+            }
 
             ImGui.TableNextColumn();
-            if (ImGui.SmallButton("Forget"))
+            if (ImGui.SmallButton("forget"))
                 observations.Forget(mobId, territoryId);
         }
     }
@@ -454,26 +470,44 @@ public sealed class MainWindow : Window
         var progress = session.Progress;
         var finished = session.Phase == FarmPhase.Finished;
 
-        ImGui.TextUnformatted(session.Target.Name);
-        ImGui.TextDisabled(
-            $"{session.Area.ZoneName}  ({session.Area.MapCentre.X:F1}, {session.Area.MapCentre.Y:F1})"
-            + (session.Area.Spots.Count > 1 ? $"  {session.Area.Spots.Count} spots" : string.Empty));
+        Style.Place(session.Target.Name);
+        ImGui.TextUnformatted(Where(session.Area));
+        Style.Trailing(Density(session.Area));
 
-        ImGui.Spacing();
-        ImGui.TextUnformatted(finished
-            ? $"Finished: {session.Status}"
-            : $"{session.Phase}: {session.Status}");
-        ImGui.Spacing();
+        Style.Gap(2f);
+        ImGui.TextColored(
+            finished ? Style.Good : Style.Muted,
+            finished ? $"Finished: {session.Status}" : $"{session.Phase}: {session.Status}");
+
+        Style.Gap();
+        Style.Heading("Progress");
 
         var kills = session.Conditions.Conditions.OfType<KillCountCondition>().FirstOrDefault();
         var time = session.Conditions.Conditions.OfType<ElapsedCondition>().FirstOrDefault();
 
-        ImGui.TextUnformatted(kills is null
-            ? $"kills {progress.Kills}"
-            : $"kills {progress.Kills}/{kills.Target}");
-        ImGui.TextUnformatted(time is null
-            ? $"elapsed {progress.Elapsed:hh\\:mm\\:ss}"
-            : $"elapsed {progress.Elapsed:hh\\:mm\\:ss}/{time.Limit:hh\\:mm\\:ss}");
+        if (kills is null)
+        {
+            ImGui.TextUnformatted("kills");
+            Style.Trailing(progress.Kills.ToString());
+        }
+        else
+        {
+            Style.Progress("kills", progress.Kills, kills.Target);
+        }
+
+        if (time is null)
+        {
+            ImGui.TextUnformatted("elapsed");
+            Style.Trailing($"{progress.Elapsed:hh\\:mm\\:ss}");
+        }
+        else
+        {
+            Style.Progress(
+                "elapsed",
+                (int)progress.Elapsed.TotalSeconds,
+                (int)time.Limit.TotalSeconds,
+                $"{progress.Elapsed:hh\\:mm\\:ss} / {time.Limit:hh\\:mm\\:ss}");
+        }
 
         var itemTargets = session.Conditions.Conditions
             .OfType<ItemCountCondition>()
@@ -482,23 +516,31 @@ public sealed class MainWindow : Window
         foreach (var itemId in itemTargets.Keys.Concat(progress.ItemsGained.Keys).Distinct())
         {
             var have = progress.CountOf(itemId);
+
             DrawItemIcon(mobs, itemId);
-            ImGui.TextUnformatted(itemTargets.TryGetValue(itemId, out var target)
-                ? $"{mobs.ItemName(itemId)} {have}/{target}"
-                : $"{mobs.ItemName(itemId)} x{have}");
+            if (itemTargets.TryGetValue(itemId, out var target))
+            {
+                Style.Progress(mobs.ItemName(itemId), have, target);
+            }
+            else
+            {
+                ImGui.TextUnformatted(mobs.ItemName(itemId));
+                Style.Trailing($"{have}");
+            }
         }
 
-        ImGui.Spacing();
+        Style.Gap();
         ImGui.Separator();
+        Style.Gap(2f);
 
         if (!finished)
         {
-            if (ImGui.Button("Stop"))
+            if (ImGui.Button("Stop", new Vector2(120f, 0f)))
                 farming.Stop();
             return;
         }
 
-        if (ImGui.Button("Done"))
+        if (ImGui.Button("Done", new Vector2(120f, 0f)))
             resultDismissed = true;
 
         ImGui.SameLine();
@@ -513,15 +555,13 @@ public sealed class MainWindow : Window
     {
         var area = target.Area;
 
-        ImGui.TextUnformatted($"Farm {target.Name}");
-        ImGui.TextDisabled(
-            $"{area.ZoneName}  ({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})  "
-            + $"{area.SpawnCount} spawns"
-            + (area.Spots.Count > 1 ? $" across {area.Spots.Count} spots" : string.Empty));
+        Style.Place(target.Name);
+        ImGui.TextUnformatted(Where(area));
+        Style.Trailing(Density(area));
 
-        ImGui.Spacing();
+        Style.Gap(2f);
         ImGui.Separator();
-        ImGui.TextDisabled("Stop when");
+        Style.Heading("Stop when");
 
         ImGui.SetNextItemWidth(120);
         ImGui.InputInt("kills", ref killTarget);
@@ -531,8 +571,7 @@ public sealed class MainWindow : Window
 
         if (target.Drops.Count > 0)
         {
-            ImGui.Spacing();
-            ImGui.TextDisabled(target.Shared ? "Collect, from any of them" : "Collect");
+            Style.Heading(target.Shared ? "Collect, from any of them" : "Collect");
             foreach (var itemId in target.Drops)
             {
                 using var id = ImRaii.PushId((int)itemId);
@@ -559,20 +598,28 @@ public sealed class MainWindow : Window
         }
         else
         {
-            ImGui.TextDisabled(target.Shared
+            Style.Muffled(target.Shared
                 ? "Nothing known drops from any of these."
                 : "Nothing known drops from this one.");
         }
 
-        ImGui.Spacing();
+        Style.Gap(2f);
         if (killTarget > 0 || minuteTarget > 0 || itemGoals.Count > 0)
             ImGui.Checkbox("meet every target, not just the first", ref requireAll);
         else
-            ImGui.TextDisabled("no target set, so it will run until you stop it");
+            Style.Muffled("no target set, so it will run until you stop it");
 
         ImGui.Separator();
+        Style.Gap(2f);
 
-        if (ImGui.Button("Start"))
+        // The one thing on this screen worth pressing, coloured like it.
+        ImGui.PushStyleColor(ImGuiCol.Button, Style.Accent with { W = 0.85f });
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Style.Accent);
+        ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.12f, 0.10f, 0.08f, 1f));
+        var start = ImGui.Button("Start", new Vector2(120f, 0f));
+        ImGui.PopStyleColor(3);
+
+        if (start)
         {
             resultDismissed = false;
             farming.Start(target, BuildConditions());
@@ -590,8 +637,7 @@ public sealed class MainWindow : Window
         if (!tab)
             return;
 
-        ImGui.Spacing();
-        ImGui.TextDisabled("Needs");
+        Style.Heading("Needs");
 
         // Everything this leans on is somebody else's plugin, found at runtime.
         // A missing one produces silence rather than an error, so the state of
@@ -600,21 +646,20 @@ public sealed class MainWindow : Window
         {
             var (mark, colour) = requirement.State switch
             {
-                RequirementState.Good => ("ok", new Vector4(0.56f, 0.75f, 0.47f, 1f)),
-                RequirementState.Blocking => ("!!", new Vector4(0.84f, 0.41f, 0.33f, 1f)),
-                _ => ("--", new Vector4(0.6f, 0.6f, 0.6f, 1f)),
+                RequirementState.Good => ("ok", Style.Good),
+                RequirementState.Blocking => ("!!", Style.Bad),
+                _ => ("--", Style.Muted),
             };
 
             ImGui.TextColored(colour, mark);
             ImGui.SameLine();
             ImGui.TextUnformatted(requirement.Name);
-            ImGui.SameLine();
-            ImGui.TextDisabled(requirement.Detail);
+            Style.Trailing(requirement.Detail);
         }
 
-        ImGui.Spacing();
+        Style.Gap();
         ImGui.Separator();
-        ImGui.Spacing();
+        Style.Heading("Getting about");
 
         var mountDistance = config.MountDistance;
         ImGui.SetNextItemWidth(220);
@@ -624,10 +669,10 @@ public sealed class MainWindow : Window
             saveConfig();
         }
 
-        ImGui.TextDisabled("Ground still to walk, with attack range already taken off,");
-        ImGui.TextDisabled("so it means the same on a caster as on a melee job.");
+        Style.Muffled("Ground still to walk, with attack range already taken off,");
+        Style.Muffled("so it means the same on a caster as on a melee job.");
 
-        ImGui.Spacing();
+        Style.Gap(2f);
         var patience = config.RespawnPatienceSeconds;
         ImGui.SetNextItemWidth(220);
         if (ImGui.SliderFloat("look a little longer before moving on", ref patience, 0f, 30f, "%.0f seconds"))
@@ -636,9 +681,12 @@ public sealed class MainWindow : Window
             saveConfig();
         }
 
-        ImGui.TextDisabled("Not a respawn wait: nothing comes back this quickly. It only stops");
-        ImGui.TextDisabled("a moment with nothing in view from sending it somewhere else.");
-        ImGui.Spacing();
+        Style.Muffled("Not a respawn wait: nothing comes back this quickly. It only stops");
+        Style.Muffled("a moment with nothing in view from sending it somewhere else.");
+
+        Style.Gap();
+        ImGui.Separator();
+        Style.Heading("While it runs");
 
         var notifications = config.Notifications;
         if (ImGui.Checkbox("announce starts and finishes", ref notifications))
@@ -666,13 +714,15 @@ public sealed class MainWindow : Window
                 saveConfig();
             }
 
-            ImGui.TextDisabled(Companion.HasGreens()
-                ? $"out for another {Companion.TimeLeft / 60f:F0} min"
-                : "no Gysahl Greens, so it cannot be called");
+            if (Companion.HasGreens())
+                Style.Muffled($"out for another {Companion.TimeLeft / 60f:F0} min");
+            else
+                ImGui.TextColored(Style.Bad, "no Gysahl Greens, so it cannot be called");
         }
 
-        ImGui.Spacing();
+        Style.Gap();
         ImGui.Separator();
+        Style.Heading("Afterwards");
 
         var record = config.RecordRuns;
         if (ImGui.Checkbox("record runs to a trace file", ref record))
@@ -681,8 +731,8 @@ public sealed class MainWindow : Window
             saveConfig();
         }
 
-        ImGui.TextDisabled("One file per run under the plugin's config folder,");
-        ImGui.TextDisabled("recording where it went and what was standing nearby.");
+        Style.Muffled("One file per run under the plugin's config folder,");
+        Style.Muffled("recording where it went and what was standing nearby.");
     }
 
     /// <summary>
@@ -751,14 +801,16 @@ public sealed class MainWindow : Window
 
         foreach (var mob in mobs.SearchMobs(mobQuery))
         {
-            var label = mob.Farmable
-                ? $"{mob.Name}##{mob.BNpcNameId}"
-                : $"{mob.Name} (no known location)##{mob.BNpcNameId}";
+            var open = selectedMob?.BNpcNameId == mob.BNpcNameId;
 
-            if (ImGui.Selectable(label, selectedMob?.BNpcNameId == mob.BNpcNameId))
-                selectedMob = mob;
+            if (ImGui.Selectable($"{mob.Name}##{mob.BNpcNameId}", open))
+                selectedMob = open ? null : mob;
 
-            if (selectedMob?.BNpcNameId == mob.BNpcNameId)
+            Style.Trailing(mob.Farmable
+                ? mob.Areas.Count == 1 ? "1 place" : $"{mob.Areas.Count} places"
+                : "nowhere known");
+
+            if (open)
                 DrawMobDetail(mob);
         }
     }
@@ -801,7 +853,7 @@ public sealed class MainWindow : Window
             return;
         }
 
-        if (ImGui.Button("Back"))
+        if (ImGui.SmallButton("back"))
         {
             selectedItem = 0;
             return;
@@ -811,17 +863,15 @@ public sealed class MainWindow : Window
         DrawItemIcon(mobs, selectedItem);
         ImGui.TextUnformatted(selectedItemName);
         if (selectedItemWanted > 1)
-        {
-            ImGui.SameLine();
-            ImGui.TextDisabled($"({selectedItemWanted} wanted)");
-        }
+            Style.Trailing($"{selectedItemWanted} wanted");
 
         ImGui.Separator();
+        Style.Gap(2f);
 
         var droppers = mobs.MobsDropping(selectedItem);
         if (droppers.Count == 0)
         {
-            ImGui.TextUnformatted("Nothing known drops this.");
+            Style.Muffled("Nothing known drops this.");
             return;
         }
 
@@ -833,10 +883,9 @@ public sealed class MainWindow : Window
         if (nowhere.Count == 0)
             return;
 
-        ImGui.Spacing();
-        ImGui.TextDisabled(
-            $"Also dropped by {Phrases.List(nowhere.Select(mob => mob.Name).ToList())},");
-        ImGui.TextDisabled("with nowhere recorded to find them.");
+        Style.Gap();
+        Style.Muffled($"Also dropped by {Phrases.Kinds(nowhere.Select(mob => mob.Name).ToList())},");
+        Style.Muffled("with nowhere recorded to find them.");
     }
 
     /// <summary>
@@ -859,43 +908,71 @@ public sealed class MainWindow : Window
             var area = field.Area;
             using var id = ImRaii.PushId($"{area.TerritoryTypeId}-{area.Centre.X:F0}-{area.Centre.Z:F0}");
 
-            ImGui.TextUnformatted($"{area.ZoneName}  ({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})");
-            ImGui.SameLine();
-            ImGui.TextDisabled(
-                $"{area.SpawnCount} spawns"
-                + (area.Spots.Count > 1 ? $" over {area.Spots.Count} spots" : string.Empty));
+            // Where it is, then what is there. The zone carries the accent
+            // because the zone is what is being chosen between.
+            Style.Place(Where(area));
+            Style.Trailing(Density(area));
 
             using var indent = ImRaii.PushIndent();
 
-            if (ImGui.SmallButton("Choose"))
+            // The row says what picking it does, so it needs no button beside
+            // it saying "choose" as well.
+            if (Style.Pick(field.Name))
                 Plan(field);
 
-            ImGui.SameLine();
-            ImGui.TextUnformatted(field.Name);
+            Style.Explain(field.Shared
+                ? $"Farm all {field.Mobs.Count} of them here."
+                : $"Farm it here.");
 
-            if (!field.Shared)
-                continue;
+            if (field.Shared)
+                DrawOnlyOne(field);
 
-            using var inner = ImRaii.PushIndent();
-
-            foreach (var mob in field.Mobs)
-            {
-                using var mobId = ImRaii.PushId((int)mob.BNpcNameId);
-
-                if (Alone(mob, area) is not { } own)
-                    continue;
-
-                if (ImGui.SmallButton("only this"))
-                    Plan(new FarmTarget(mob, own));
-
-                ImGui.SameLine();
-                ImGui.TextDisabled($"{mob.Name}  {own.SpawnCount} spawns");
-            }
+            Style.Gap(2f);
         }
 
         if (fields.Count > 5)
-            ImGui.TextDisabled($"... and {fields.Count - 5} more");
+            Style.Muffled($"and {fields.Count - 5} more, further off");
     }
+
+    /// <summary>
+    /// The same field, one kind at a time, for when only one of them is wanted.
+    /// </summary>
+    /// <remarks>
+    /// Named by whatever tells them apart rather than in full. Three controls
+    /// reading "petalouda" would not be a choice, and the whole name is a hover
+    /// away for anyone who wants to be sure.
+    /// </remarks>
+    private void DrawOnlyOne(FarmTarget field)
+    {
+        Style.Muffled("just one");
+
+        var distinct = field.Distinct;
+
+        for (var i = 0; i < field.Mobs.Count; i++)
+        {
+            var mob = field.Mobs[i];
+            using var id = ImRaii.PushId((int)mob.BNpcNameId);
+
+            if (Alone(mob, field.Area) is not { } own)
+                continue;
+
+            ImGui.SameLine();
+            if (ImGui.SmallButton(distinct[i]))
+                Plan(new FarmTarget(mob, own));
+
+            Style.Explain(
+                $"{mob.Name} on its own: {own.SpawnCount} spawns "
+                + $"at ({own.MapCentre.X:F1}, {own.MapCentre.Y:F1})");
+        }
+    }
+
+    private static string Where(FarmArea area) =>
+        $"{area.ZoneName}   ({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})";
+
+    private static string Density(FarmArea area) =>
+        area.Spots.Count > 1
+            ? $"{area.SpawnCount} spawns   {area.Spots.Count} spots"
+            : $"{area.SpawnCount} spawns";
 
     /// <summary>
     /// One mob's own patch of a shared field, for going after just that one.
@@ -977,10 +1054,10 @@ public sealed class MainWindow : Window
 
         if (farmable.Count == 0)
         {
-            ImGui.Spacing();
-            ImGui.TextDisabled("Nothing on this list is worth farming a mob for.");
+            Style.Gap();
+            Style.Muffled("Nothing on this list is worth farming a mob for.");
             if (rest > 0)
-                ImGui.TextDisabled($"Its {rest} material(s) are gathered, bought or crafted.");
+                Style.Muffled($"Its {rest} material(s) are gathered, bought or crafted.");
             return;
         }
 
@@ -995,16 +1072,19 @@ public sealed class MainWindow : Window
             if (ImGui.Selectable($"{material.Name}##material"))
                 Want(material.ItemId, material.Name, Math.Max(1, missing));
 
-            ImGui.SameLine();
-            ImGui.TextDisabled(missing == 0
-                ? $"{held}/{material.Required}, enough already"
-                : $"{held}/{material.Required}, {missing} to go");
+            Style.Explain(missing == 0
+                ? "You have enough of these already."
+                : $"Look for {missing} more.");
+
+            Style.Trailing(missing == 0
+                ? $"{held} / {material.Required}   enough"
+                : $"{held} / {material.Required}   {missing} to go");
         }
 
         if (rest > 0)
         {
-            ImGui.Spacing();
-            ImGui.TextDisabled($"{rest} other material(s) are gathered, bought or crafted.");
+            Style.Gap();
+            Style.Muffled($"{rest} other material(s) are gathered, bought or crafted.");
         }
     }
 
@@ -1022,7 +1102,7 @@ public sealed class MainWindow : Window
 
         if (!mob.Farmable)
         {
-            ImGui.TextDisabled("No recorded spawn positions.");
+            Style.Muffled("nowhere recorded to find it");
             return;
         }
 
@@ -1030,17 +1110,16 @@ public sealed class MainWindow : Window
         {
             using var id = ImRaii.PushId($"{mob.BNpcNameId}-{area.TerritoryTypeId}-{area.Centre.X:F0}");
 
-            if (ImGui.SmallButton("Choose"))
+            if (Style.Pick(Where(area)))
                 Plan(new FarmTarget(mob, area));
 
-            ImGui.SameLine();
-            ImGui.TextDisabled(
-                $"{area.ZoneName}  ({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})  "
-                + $"{area.SpawnCount} spawns"
-                + (area.Spots.Count > 1 ? $" over {area.Spots.Count} spots" : string.Empty));
+            Style.Explain($"Farm {mob.Name} here.");
+            Style.Trailing(Density(area));
         }
 
         if (mob.Areas.Count > 5)
-            ImGui.TextDisabled($"... and {mob.Areas.Count - 5} more");
+            Style.Muffled($"and {mob.Areas.Count - 5} more, further off");
+
+        Style.Gap(2f);
     }
 }
