@@ -113,6 +113,11 @@ public sealed class FarmSession
     private DateTime lastSample = DateTime.MinValue;
     private DateTime lastSighting = DateTime.MinValue;
     private readonly Dictionary<int, DateTime> clearedAt = [];
+
+    // The spot underfoot, watched while standing on it. The dictionary above
+    // only measures spots the circuit comes back to; this measures the one it
+    // is on, which is the only measurement a single spot area can produce.
+    private readonly SpotWatch watch = new();
     private int kills;
 
     public FarmSession(
@@ -671,6 +676,10 @@ public sealed class FarmSession
         resolvedSpot = null;
         flagged = false;
         emptySince = null;
+
+        // Whatever happens back there now happens where nobody is looking.
+        watch.Left();
+
         navmesh.Stop();
         Phase = FarmPhase.Travelling;
     }
@@ -679,11 +688,19 @@ public sealed class FarmSession
     {
         if (clientState.TerritoryType != area.TerritoryTypeId)
         {
+            // Out of the zone entirely, so nothing here is being watched.
+            watch.Left();
             Phase = FarmPhase.Teleporting;
             return;
         }
 
         var spot = ResolveSpot();
+
+        // Chasing something that turned up on the way is not watching the spot,
+        // and timing it from over here would be timing the detour.
+        if (Vector3.Distance(player.Position, spot) > ArrivalRange)
+            watch.Left();
+
         var quarry = FindQuarry(player, spot, VisionRadius, HuntRadius);
 
         if (quarry is null)
@@ -693,19 +710,32 @@ public sealed class FarmSession
             return;
         }
 
-        // Finding something here again closes the loop on how long this spot
-        // took to come back, which is what tells the circuit when to return.
+        // Something standing here again closes whichever measurement was open:
+        // the spot we cleared before walking away, or the one underfoot that we
+        // have been standing over since emptying it. Both are credited to what
+        // actually came back rather than to every kind the run is after, since
+        // the others may still be down.
+        if (watch.Occupied(DateTime.UtcNow) is { } waited)
+        {
+            observations.RecordRepopulation(quarry.NameId, area.TerritoryTypeId, waited);
+            recorder?.Write("repopulated", new
+            {
+                spot = spotIndex % area.Spots.Count,
+                seconds = Math.Round(waited.TotalSeconds, 1),
+                how = "watched",
+            });
+        }
+
         if (clearedAt.Remove(spotIndex % area.Spots.Count, out var clearedWhen))
         {
             var taken = DateTime.UtcNow - clearedWhen;
 
-            // Credited to whatever actually came back, not to every kind the run
-            // is after. The others may still be down.
             observations.RecordRepopulation(quarry.NameId, area.TerritoryTypeId, taken);
             recorder?.Write("repopulated", new
             {
                 spot = spotIndex % area.Spots.Count,
                 seconds = Math.Round(taken.TotalSeconds, 1),
+                how = "returned",
             });
         }
 
@@ -807,6 +837,12 @@ public sealed class FarmSession
     /// </summary>
     private void TickEmptySpot(IPlayerCharacter player, Vector3 spot)
     {
+        // Two clocks, and only one of them is about patience. This one is the
+        // measurement, and it survives the patience running out: a spot with
+        // nowhere to move on to is waited on for as long as it takes, and how
+        // long that was is the whole thing worth knowing.
+        watch.Empty(DateTime.UtcNow);
+
         emptySince ??= DateTime.UtcNow;
 
         if (DateTime.UtcNow - emptySince >= TimeSpan.FromSeconds(config.RespawnPatienceSeconds))

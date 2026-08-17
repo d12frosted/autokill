@@ -59,6 +59,18 @@ reading the diff. Dates are when the tag went out.
 
 ### Fixed
 
+- **The places farmed hardest now learn something.** How long a spot takes to
+  come back was only ever measured on the return trip: leave a spot, come back,
+  see how long it had been. A mob with a single recorded spot never leaves, so
+  it never measured at all, and a field of thirty spots never came back inside
+  the ten minutes past which a gap is thrown away as untrustworthy. Hundreds of
+  kills in either could leave the Learned tab still saying "not yet".
+
+  A run now also watches the spot it is standing on: it cleared it, it went
+  quiet, something is standing there again. That number has no travel in it, so
+  it is closer to a respawn time than anything recorded before, and it turns up
+  exactly where nothing used to.
+
 - **Wrath keeps fighting after a job change.** Changing job ends Wrath's lease, and the
   plugin used to believe its own record of having started a rotation, so the rest of the
   run was spent watching a mob that nothing was hitting. It now asks Wrath, takes the

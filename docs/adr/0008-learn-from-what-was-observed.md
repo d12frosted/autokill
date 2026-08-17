@@ -19,10 +19,20 @@ looking at every mob nearby, several times a second.
 Keep a per character store, keyed by mob and zone, of what farming has taught us:
 how long spots took to repopulate, where mobs were seen, and how many were killed.
 
-Emptying a spot stamps the time; finding it populated again closes the loop. That number
-is deliberately not called a respawn timer. It includes however long it took to return, so
-it reads long. It is the more useful figure anyway, because the question a circuit asks is
-whether coming back is worth it, not when the server ticked.
+Two measurements, from the two things a run does at a spot.
+
+Standing on one and watching it: we cleared it, it went quiet, something is standing there
+again. No travel in that number, and it is the only measurement a mob with a single spot
+can produce, since such a run never leaves. Only what we emptied ourselves counts; a spot
+already quiet on arrival may have been quiet for an hour, and timing from our arrival
+would be timing the walk to it.
+
+Leaving one and coming back: emptying stamps the time, finding it populated again closes
+the loop. That number carries the whole trip back inside it, so it reads long. It is worth
+keeping anyway, because the question a circuit asks is whether coming back is worth it,
+not when the server ticked.
+
+Neither is called a respawn timer.
 
 Guards on what is believed:
 
@@ -41,6 +51,9 @@ fifty times weighs more than one glimpse and the file stays small.
   Learned tab shows the estimate and how many observations back it.
 - Learnt data changes behaviour, so it must be inspectable and erasable. Hence the tab,
   with per entry and wholesale forgetting.
+- The places farmed hardest used to learn the least. A run measured only on the return
+  trip, so a mob with one spot never measured at all, and a field of thirty spots never
+  came back inside the ten minute guard. Watching the spot underfoot closes both gaps.
 - Sightings are collected but not yet used to move spot positions. Measurement showed
   shipped spot centres sit within 4 to 13 yalms of observed centres, which is not enough
   error to justify moving them. The data is kept so the question can be revisited with
