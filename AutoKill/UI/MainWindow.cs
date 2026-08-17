@@ -829,7 +829,7 @@ public sealed class MainWindow : Window
             return;
 
         artisan.Refresh();
-        DrawCraftingListPicker();
+        DrawCraftingListPicker(mobs);
 
         if (craftingList is null)
         {
@@ -1001,8 +1001,12 @@ public sealed class MainWindow : Window
     /// A crafting list already says what has to be found and how much of it, so
     /// re-entering both by hand is work someone has already done. The lists come
     /// from Artisan, which is where they are kept.
+    ///
+    /// The rows say how much of each list is still worth going out for. Picking
+    /// between lists otherwise means opening each one to find out whether it
+    /// has anything left in it that a mob can supply.
     /// </remarks>
-    private void DrawCraftingListPicker()
+    private void DrawCraftingListPicker(MobIndex mobs)
     {
         if (!artisan.Installed || artisan.Lists.Count == 0)
             return;
@@ -1022,12 +1026,56 @@ public sealed class MainWindow : Window
                 Reread(fresh);
         }
 
-        var current = craftingList is null ? 0 : lists.ToList().IndexOf(craftingList) + 1;
-        var labels = "search for an item\0" + string.Join('\0', lists.Select(list => list.Name)) + "\0";
-
         ImGui.SetNextItemWidth(-1);
-        if (ImGui.Combo("##artisan-list", ref current, labels))
-            ChooseCraftingList(current == 0 ? null : lists[current - 1]);
+        if (!ImGui.BeginCombo("##artisan-list", craftingList?.Name ?? "search for an item"))
+            return;
+
+        // Searching is not one of the lists, so it does not sit among them
+        // looking like one.
+        if (Style.Pick(
+                "search for an item",
+                "Look something up by name instead.",
+                FontAwesomeIcon.Search,
+                craftingList is null))
+        {
+            ChooseCraftingList(null);
+        }
+
+        ImGui.Separator();
+
+        foreach (var list in lists)
+        {
+            using var id = ImRaii.PushId(list.Id);
+
+            if (Style.Pick(list.Name, null, FontAwesomeIcon.ListUl, list.Id == craftingList?.Id))
+                ChooseCraftingList(list);
+
+            var (left, colour) = Outstanding(mobs, list);
+            Style.Trailing(left, colour);
+        }
+
+        ImGui.EndCombo();
+    }
+
+    /// <summary>
+    /// How much of a list is still worth going out for: materials a mob can
+    /// supply and the bags do not already hold enough of.
+    /// </summary>
+    private (string Says, Vector4 Colour) Outstanding(MobIndex mobs, CraftingList list)
+    {
+        var farmable = artisan.Materials(list)
+            .Where(material => !material.Crystal && mobs.AnythingDrops(material.ItemId))
+            .ToList();
+
+        if (farmable.Count == 0)
+            return ("nothing a mob drops", Style.Muted);
+
+        var left = farmable.Count(material =>
+            CraftingLists.StillNeeded(material.Required, Bags.CountOf(material.ItemId)) > 0);
+
+        return left == 0
+            ? ("all gathered", Style.Good)
+            : ($"{left} to farm", Style.Accent);
     }
 
     private void ChooseCraftingList(CraftingList? list)
@@ -1054,7 +1102,7 @@ public sealed class MainWindow : Window
     private void DrawCraftingMaterials(MobIndex mobs)
     {
         var farmable = craftingMaterials
-            .Where(material => !material.Crystal && mobs.MobsDropping(material.ItemId).Count > 0)
+            .Where(material => !material.Crystal && mobs.AnythingDrops(material.ItemId))
             .ToList();
 
         var rest = craftingMaterials.Count - farmable.Count;

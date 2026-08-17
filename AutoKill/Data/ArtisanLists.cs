@@ -44,6 +44,12 @@ public sealed class ArtisanLists(string path, IDataManager data, IPluginLog log)
     private DateTime lastWritten = DateTime.MinValue;
     private Dictionary<uint, uint>? byResult;
 
+    // Working out what a list needs means following every subcraft down, which
+    // is far too much to do for every list on every frame a picker is open.
+    // Thrown away whole whenever the file is read again, since that is the only
+    // thing that can change the answer.
+    private readonly Dictionary<int, IReadOnlyList<ListMaterial>> materials = [];
+
     public IReadOnlyList<CraftingList> Lists { get; private set; } = [];
 
     /// <summary>Whether Artisan has ever been set up on this character's install.</summary>
@@ -75,6 +81,7 @@ public sealed class ArtisanLists(string path, IDataManager data, IPluginLog log)
 
         lastWritten = file.LastWriteTimeUtc;
         Lists = Read();
+        materials.Clear();
     }
 
     private IReadOnlyList<CraftingList> Read()
@@ -108,7 +115,10 @@ public sealed class ArtisanLists(string path, IDataManager data, IPluginLog log)
     }
 
     /// <summary>Everything a list asks you to bring, most of it first.</summary>
-    public IReadOnlyList<ListMaterial> Materials(CraftingList list)
+    public IReadOnlyList<ListMaterial> Materials(CraftingList list) =>
+        materials.TryGetValue(list.Id, out var known) ? known : materials[list.Id] = Follow(list);
+
+    private IReadOnlyList<ListMaterial> Follow(CraftingList list)
     {
         var items = data.GetExcelSheet<Item>();
 

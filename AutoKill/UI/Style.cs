@@ -139,18 +139,22 @@ internal static class Style
     /// The row is drawn first and the mark and label over it, so the whole
     /// width answers to the mouse rather than just the words.
     /// </remarks>
-    public static bool Pick(string label, string? tip = null, FontAwesomeIcon mark = FontAwesomeIcon.Khanda)
+    public static bool Pick(
+        string label,
+        string? tip = null,
+        FontAwesomeIcon mark = FontAwesomeIcon.Khanda,
+        bool current = false)
     {
         var start = ImGui.GetCursorPos();
 
-        var picked = ImGui.Selectable($"##{label}", false, ImGuiSelectableFlags.None);
+        var picked = ImGui.Selectable($"##{label}", current, ImGuiSelectableFlags.None);
         var hovered = ImGui.IsItemHovered();
         var after = ImGui.GetCursorPos();
 
         ImGui.SetCursorPos(start);
 
         ImGui.PushFont(UiBuilder.IconFont);
-        ImGui.TextColored(hovered ? Accent : Muted, mark.ToIconString());
+        ImGui.TextColored(hovered || current ? Accent : Muted, mark.ToIconString());
         ImGui.PopFont();
 
         ImGui.SameLine();

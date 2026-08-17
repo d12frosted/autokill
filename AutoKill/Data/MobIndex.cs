@@ -354,6 +354,13 @@ public sealed class MobIndex
     }
 
     /// <summary>
+    /// Whether anything worth going to drops this, without working out what.
+    /// Asked of every material on a list, so it may not allocate to answer.
+    /// </summary>
+    public bool AnythingDrops(uint itemId) =>
+        mobsByItem.TryGetValue(itemId, out var mobs) && mobs.Any(byNameId.ContainsKey);
+
+    /// <summary>
     /// The same mobs as places rather than as species: every field where
     /// something dropping this item stands, thickest first, each carrying all
     /// the kinds standing in it.
