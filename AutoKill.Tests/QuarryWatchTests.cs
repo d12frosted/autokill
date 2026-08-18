@@ -84,6 +84,92 @@ public class QuarryWatchTests
     }
 
     [Fact]
+    public void StandingInRangeBehindSomethingIsNotWorthWaitingOn()
+    {
+        // Something solid between the two is visible at once, and ten seconds
+        // of nothing landing would only say the same thing.
+        var watch = NewWatch();
+        watch.Watch(Mob, Vector3.Zero, 18f, 1000, inRange: true, At(0));
+
+        var nudge = watch.Watch(Mob, Vector3.Zero, 18f, 1000, inRange: true, At(1), inSight: false);
+        Assert.Equal(QuarryTrouble.Blocked, nudge.Trouble);
+        Assert.False(nudge.GiveUp);
+    }
+
+    [Fact]
+    public void BeingBlockedDoesNotSpendTheSecondTry()
+    {
+        // The answer to being blocked is to walk in until it can be seen, and
+        // the place it stops may be wrong about that. Nothing landing from
+        // there is the ordinary stall and gets the ordinary second try.
+        var watch = NewWatch();
+        watch.Watch(Mob, Vector3.Zero, 18f, 1000, inRange: true, At(0));
+        watch.Watch(Mob, Vector3.Zero, 18f, 1000, inRange: true, At(1), inSight: false);
+
+        // Walking in is progress, and progress resets the clock.
+        Assert.False(watch.Watch(Mob, Vector3.Zero, 15f, 1000, inRange: true, At(4)).Stalled);
+
+        var nudge = watch.Watch(Mob, Vector3.Zero, 15f, 1000, inRange: true, At(14));
+        Assert.Equal(QuarryTrouble.OutOfSight, nudge.Trouble);
+        Assert.False(nudge.GiveUp);
+
+        var over = watch.Watch(Mob, Vector3.Zero, 15f, 1000, inRange: true, At(24));
+        Assert.True(over.GiveUp);
+    }
+
+    [Fact]
+    public void BlockedOutOfRangeIsNothingYet()
+    {
+        // Far off, the way there decides what is between the two, not a line
+        // drawn from here.
+        var watch = NewWatch();
+        watch.Watch(Mob, Vector3.Zero, 40f, 1000, inRange: false, At(0));
+
+        Assert.False(watch.Watch(Mob, Vector3.Zero, 39f, 1000, inRange: false, At(1), inSight: false).Stalled);
+    }
+
+    [Fact]
+    public void BlockedButHurtingIsAFightNotAStall()
+    {
+        // If its health is coming down then something is reaching it, whatever
+        // a line drawn between the two says.
+        var watch = NewWatch();
+        watch.Watch(Mob, Vector3.Zero, 18f, 1000, inRange: true, At(0));
+
+        Assert.False(watch.Watch(Mob, Vector3.Zero, 18f, 900, inRange: true, At(1), inSight: false).Stalled);
+    }
+
+    [Fact]
+    public void BlockedIsOnlyAnsweredOnce()
+    {
+        // Saying it again every tick would keep the run walking in for as long
+        // as the line stayed blocked. Once is the nudge; after that the
+        // ordinary clock decides.
+        var watch = NewWatch();
+        watch.Watch(Mob, Vector3.Zero, 18f, 1000, inRange: true, At(0));
+        watch.Watch(Mob, Vector3.Zero, 18f, 1000, inRange: true, At(1), inSight: false);
+
+        Assert.False(watch.Watch(Mob, Vector3.Zero, 18f, 1000, inRange: true, At(2), inSight: false).Stalled);
+        Assert.False(watch.Watch(Mob, Vector3.Zero, 18f, 1000, inRange: true, At(8), inSight: false).Stalled);
+
+        var nudge = watch.Watch(Mob, Vector3.Zero, 18f, 1000, inRange: true, At(11), inSight: false);
+        Assert.Equal(QuarryTrouble.OutOfSight, nudge.Trouble);
+        Assert.False(nudge.GiveUp);
+        Assert.True(watch.Watch(Mob, Vector3.Zero, 18f, 1000, inRange: true, At(21), inSight: false).GiveUp);
+    }
+
+    [Fact]
+    public void ANewQuarryCanBeBlockedAgain()
+    {
+        var watch = NewWatch();
+        watch.Watch(Mob, Vector3.Zero, 18f, 1000, inRange: true, At(0));
+        watch.Watch(Mob, Vector3.Zero, 18f, 1000, inRange: true, At(1), inSight: false);
+        watch.Watch(Other, Vector3.Zero, 18f, 1000, inRange: true, At(2));
+
+        Assert.Equal(QuarryTrouble.Blocked, watch.Watch(Other, Vector3.Zero, 18f, 1000, inRange: true, At(3), inSight: false).Trouble);
+    }
+
+    [Fact]
     public void HavingArrivedOnceTheTroubleIsNotGettingThere()
     {
         // It was reached, so the walk is not what failed. A mob that shuffles a

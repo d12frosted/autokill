@@ -21,6 +21,30 @@ public enum FarmPhase
 }
 
 /// <summary>
+/// How close to go to the quarry in hand, in the order the run escalates
+/// through them. A stall only ever moves down the list; the one way back up is
+/// a walk in for a line ending where a line was found, which is standing at
+/// range again.
+/// </summary>
+internal enum Closeness
+{
+    /// <summary>As far off as the job can attack from. Where a person stands.</summary>
+    AtRange,
+
+    /// <summary>
+    /// Walking in from there because something is in the way, and stopping at
+    /// the first place with a clear line, which is usually still at range.
+    /// </summary>
+    UntilSeen,
+
+    /// <summary>
+    /// Right up to it. The one place it can always be seen from, and somewhere
+    /// a caster has no business standing, so the last resort.
+    /// </summary>
+    Melee,
+}
+
+/// <summary>
 /// One farming run: get to the mob, keep killing it, stop when told to.
 /// </summary>
 /// <remarks>
@@ -129,7 +153,7 @@ public sealed class FarmSession
     private int spotIndex;
     private DateTime? emptySince;
     private ulong chosen;
-    private bool closeIn;
+    private Closeness approach;
     private Vector3 lastPosition;
     private DateTime? stuckSince;
     private bool stuckReported;
@@ -873,7 +897,7 @@ public sealed class FarmSession
         if (chosen != quarry.GameObjectId)
         {
             chosen = quarry.GameObjectId;
-            closeIn = false;
+            approach = Closeness.AtRange;
             recorder?.Write("target", new
             {
                 id = quarry.GameObjectId,
@@ -894,13 +918,23 @@ public sealed class FarmSession
         // job can attack from rather than on the tightened reach below, because
         // the question being asked is whether standing close enough to fight
         // achieved anything.
+        var inRange = distance <= EngageRange;
+
+        // Whether there is a clear line from where the character would stand.
+        // Only asked within range, since that is where the run stops and
+        // stands, and not once it is going in to melee: from there the answer
+        // is going to be yes, and if it is not, the clock decides.
+        var looked = inRange && approach != Closeness.Melee;
+        var seen = looked && InSight(player, quarry);
+
         var check = quarryWatch.Watch(
             quarry.GameObjectId,
             quarry.Position,
             distance,
             quarry.CurrentHp,
-            inRange: distance <= EngageRange,
-            DateTime.UtcNow);
+            inRange,
+            DateTime.UtcNow,
+            inSight: !looked || seen);
 
         if (check.GiveUp)
         {
@@ -908,28 +942,52 @@ public sealed class FarmSession
             return;
         }
 
-        if (check.Stalled && !closeIn)
+        // A blocked line is answered by walking in until it clears; anything
+        // else, including a place that looked clear and was not, by walking in
+        // to melee. Melee is the one place a target can always be seen from,
+        // and also somewhere a caster has no business standing, so it is the
+        // last answer rather than the first.
+        if (check.Stalled)
         {
-            closeIn = true;
-            recorder?.Write("close-in", new
+            var next = check.Trouble == QuarryTrouble.Blocked ? Closeness.UntilSeen : Closeness.Melee;
+            if (next > approach)
+            {
+                approach = next;
+                recorder?.Write("close-in", new
+                {
+                    id = quarry.GameObjectId,
+                    trouble = check.Trouble.ToString(),
+                    to = next.ToString(),
+                    away = Math.Round(distance, 1),
+                    hp = quarry.CurrentHp,
+                });
+
+                // The route in hand is the one getting nowhere, so drop it and
+                // let the next tick ask for a fresh one to the tighter range.
+                navmesh.Stop();
+            }
+        }
+
+        // Walking in for a line, and this is the first place that has one:
+        // stop here rather than any closer. In the air that means the ground
+        // underneath can see it, so this is where to come down.
+        if (approach == Closeness.UntilSeen && seen)
+        {
+            approach = Closeness.AtRange;
+            recorder?.Write("seen", new
             {
                 id = quarry.GameObjectId,
-                trouble = check.Trouble.ToString(),
                 away = Math.Round(distance, 1),
-                hp = quarry.CurrentHp,
+                flying = PlayerActions.IsFlying(condition),
             });
-
-            // The route in hand is the one getting nowhere, so drop it and let
-            // the next tick ask for a fresh one to the tighter range.
-            navmesh.Stop();
         }
 
         // The edge of a caster's reach is where something in the way costs the
         // most: far enough off that anything blocks the line, close enough that
-        // the run believes it has arrived and stands there. Walking in to melee
-        // re-routes around whatever it is, and usually brings the line of sight
-        // back with it.
-        var reach = closeIn ? MeleeRange : EngageRange;
+        // the run believes it has arrived and stands there. Walking in
+        // re-routes around whatever it is, and the first place the line comes
+        // back is where the walk ends, which is usually still at range.
+        var reach = approach == Closeness.AtRange ? EngageRange : MeleeRange;
 
         // Not yet within reach. Ride if it is worth riding, walk if it is not.
         //
@@ -1034,7 +1092,7 @@ public sealed class FarmSession
         engagedName.Remove(quarry.GameObjectId);
 
         chosen = 0;
-        closeIn = false;
+        approach = Closeness.AtRange;
         navmesh.Stop();
 
         // Whatever this spot does next is not a measurement any more. Something
@@ -1235,6 +1293,28 @@ public sealed class FarmSession
     /// </summary>
     private static float Horizontally(Vector3 a, Vector3 b) =>
         Vector2.Distance(new Vector2(a.X, a.Z), new Vector2(b.X, b.Z));
+
+    /// <summary>
+    /// Whether the quarry can be seen from where the character would stand.
+    /// </summary>
+    /// <remarks>
+    /// In the air that is the ground underneath, not the saddle. From up there
+    /// most things are in plain view, and then the dismount puts the character
+    /// on a ledge with the quarry below its lip, or behind the rock it was
+    /// looking over: within reach on the map and no line at all. Asking about
+    /// the landing before dismounting is what lets the run fly in closer
+    /// instead of landing, finding out, and walking round.
+    ///
+    /// When the mesh cannot say what is underneath, the saddle will have to do.
+    /// </remarks>
+    private bool InSight(IPlayerCharacter player, IBattleNpc quarry)
+    {
+        var standing = player.Position;
+        if (PlayerActions.IsFlying(condition) && navmesh.PointOnFloor(standing) is { } floor)
+            standing = floor;
+
+        return PlayerActions.InLineOfSight(standing, quarry.Position);
+    }
 
     /// <summary>
     /// The nearest worthwhile target, counting anything near the spot as well as

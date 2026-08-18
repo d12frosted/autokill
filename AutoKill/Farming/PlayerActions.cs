@@ -3,7 +3,9 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using Lumina.Excel.Sheets;
 
 namespace AutoKill.Farming;
@@ -107,6 +109,43 @@ public static class PlayerActions
 
         var state = PlayerState.Instance();
         return state != null && state->IsAetherCurrentZoneComplete(flagSet);
+    }
+
+    // Roughly head height. Positions are at the feet, and a line drawn from
+    // there runs along the ground and into every kerb.
+    private const float EyeHeight = 2f;
+
+    /// <summary>
+    /// Whether anything solid stands between someone at <paramref name="viewer"/>
+    /// and something at <paramref name="viewed"/>.
+    /// </summary>
+    /// <remarks>
+    /// A ray through the scenery's collision, from head height to head height,
+    /// filtered to the material that blocks sight. Wrath and Rotation Solver
+    /// ask the same question the same way, so what this says can be seen and
+    /// what the rotation is willing to attack agree.
+    ///
+    /// The collision module is a hint rather than an oracle. When it is not
+    /// there to ask, the answer is that nothing is in the way, since the
+    /// alternative is treating every quarry as hidden.
+    /// </remarks>
+    public static unsafe bool InLineOfSight(Vector3 viewer, Vector3 viewed)
+    {
+        var origin = viewer with { Y = viewer.Y + EyeHeight };
+        var target = viewed with { Y = viewed.Y + EyeHeight };
+        var offset = target - origin;
+        var distance = offset.Length();
+        if (distance < 0.01f)
+            return true;
+
+        var framework = Framework.Instance();
+        if (framework == null || framework->BGCollisionModule == null)
+            return true;
+
+        var direction = offset / distance;
+        var flags = stackalloc int[] { 0x4000, 0, 0x4000, 0 };
+        RaycastHit hit;
+        return !framework->BGCollisionModule->RaycastMaterialFilter(&hit, &origin, &direction, distance, 1, flags);
     }
 
     /// <summary>

@@ -18,6 +18,12 @@ public enum QuarryTrouble
     /// see it: the rock that stopped the walk stops the spells too.
     /// </summary>
     OutOfSight,
+
+    /// <summary>
+    /// Close enough to fight, with something solid between the two. Seen
+    /// directly rather than inferred from its health, so no waiting was needed.
+    /// </summary>
+    Blocked,
 }
 
 /// <summary>What to do about the quarry just looked at.</summary>
@@ -54,6 +60,16 @@ public readonly record struct QuarryCheck(QuarryTrouble Trouble, bool GiveUp)
 /// somewhere else nearby is what clears most of these. There is only ever one
 /// second try: re-arming it on any scrap of progress would let something that
 /// inches forward and stops again hold the run there all day.
+///
+/// One thing can be told without waiting. When the caller can see that there
+/// is something solid between the character and a quarry it is standing in
+/// range of, it is told so at once, since the patience would only run out to
+/// say the same thing. That is a nudge rather than the second try: the caller
+/// answers it by moving to somewhere the quarry can be seen from, and it may be
+/// wrong about where that is, in which case nothing landing from there is the
+/// ordinary stall with the ordinary second try still to come. It is said once
+/// per quarry, because said every tick it would keep the run moving for as
+/// long as the line stayed blocked.
 /// </remarks>
 /// <param name="patience">How long nothing may happen before it counts as a stall.</param>
 /// <param name="cooldown">How long one given up on stays passed over.</param>
@@ -74,6 +90,7 @@ public sealed class QuarryWatch(TimeSpan patience, TimeSpan cooldown, float wand
     private uint weakest;
     private bool arrived;
     private bool triedAgain;
+    private bool saidBlocked;
     private DateTime lastProgress;
 
     /// <summary>
@@ -82,8 +99,13 @@ public sealed class QuarryWatch(TimeSpan patience, TimeSpan cooldown, float wand
     /// </summary>
     /// <param name="distance">Yalms from the character, however the caller measures that.</param>
     /// <param name="inRange">Whether the character is close enough to be attacking it.</param>
+    /// <param name="inSight">
+    /// Whether there is a clear line to it from where the character stands.
+    /// True when the caller has not looked, since not having looked is no
+    /// reason to doubt it.
+    /// </param>
     public QuarryCheck Watch(
-        ulong id, Vector3 position, float distance, uint hp, bool inRange, DateTime now)
+        ulong id, Vector3 position, float distance, uint hp, bool inRange, DateTime now, bool inSight = true)
     {
         if (id != watching)
         {
@@ -92,6 +114,7 @@ public sealed class QuarryWatch(TimeSpan patience, TimeSpan cooldown, float wand
             weakest = hp;
             arrived = inRange;
             triedAgain = false;
+            saidBlocked = false;
             lastProgress = now;
             return QuarryCheck.Fine;
         }
@@ -107,6 +130,17 @@ public sealed class QuarryWatch(TimeSpan patience, TimeSpan cooldown, float wand
             closest = distance;
         if (hurting)
             weakest = hp;
+
+        // Standing in range with something solid in the way is not worth
+        // waiting on. Health coming down overrules the line, though: whatever
+        // it says, something is reaching it. Closing does not, since the
+        // character is walking in to the very place the line was drawn from.
+        if (inRange && !inSight && !hurting && !saidBlocked && !triedAgain)
+        {
+            saidBlocked = true;
+            lastProgress = now;
+            return new QuarryCheck(QuarryTrouble.Blocked, false);
+        }
 
         if (closing || hurting)
         {

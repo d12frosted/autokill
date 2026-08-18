@@ -67,16 +67,27 @@ reading the diff. Dates are when the tag went out.
   always in sight the circuit never decided the spot was done and moved on. A
   full field and hours on the clock, spent on one mob.
 
-  It now watches whether anything is actually happening. Either the distance is
-  coming down or the target's health is, and if neither has for ten seconds it
-  walks in closer, which re-routes around whatever is in the way and usually
-  takes the line of sight back with it. If that changes nothing either, it
-  leaves that one alone for a while and gets on with the rest of the field. One
-  that wanders off from wherever it was abandoned is worth trying again at once.
+  It now looks before it stands. Once within reach it checks there is a clear
+  line to the target from where it would be standing, which in the air is the
+  ground underneath rather than the saddle, since that is where the dismount
+  puts it. Nothing in the way, and it stops there. Something in the way, a rock
+  or the lip of a ledge with the target below it, and it keeps going, and stops
+  at the first place the target can be seen from, which is usually a few yalms
+  round the rock and still at range. A ranged job stays a ranged job; it does
+  not march into melee because a boulder was in the way, and it does not land
+  on a ledge, wait, and find out the hard way.
 
-  This makes no attempt to tell the reasons apart. No path, no line of sight, a
-  snag on the scenery and a rotation sitting idle all look identical from the
-  outside, and none of them is worth standing still for.
+  Where looking says nothing, it watches whether anything is actually happening.
+  Either the distance is coming down or the target's health is, and if neither
+  has for ten seconds it walks in to melee, the one place a target can always
+  be seen from, which re-routes around whatever is in the way. If that changes
+  nothing either, it leaves that one alone for a while and gets on with the rest
+  of the field. One that wanders off from wherever it was abandoned is worth
+  trying again at once.
+
+  The watching makes no attempt to tell the reasons apart. No path, no line of
+  sight, a snag on the scenery and a rotation sitting idle all look identical
+  from the outside, and none of them is worth standing still for.
 
 - **A spot it cannot get to no longer ends the run either.** Spawn positions
   carry no height, so a spot is a pair of coordinates dropped onto whatever the
