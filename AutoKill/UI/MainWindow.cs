@@ -55,6 +55,11 @@ public sealed class MainWindow : Window
     private bool resultDismissed;
     private bool adjusting;
 
+    // Browsing while a run grinds is planning the next one, which is exactly
+    // what a twenty minute farm is for. Only the goals of the running one stay
+    // out of reach.
+    private bool browsingMeanwhile;
+
     public MainWindow(
         Func<MobIndex?> index,
         FarmController farming,
@@ -108,16 +113,29 @@ public sealed class MainWindow : Window
         var session = farming.Current;
         if (session is not null && !(session.Phase == FarmPhase.Finished && resultDismissed))
         {
+            // A finish always brings the result forward, wherever the browsing
+            // had wandered: it is the one thing worth interrupting for.
+            if (session.Phase == FarmPhase.Finished)
+                browsingMeanwhile = false;
+
             // The title carries the state too, since the window is often behind
             // something else while a run is going.
             WindowName = session.Phase == FarmPhase.Paused
                 ? $"AutoKill - paused - {session.Target.Name}###AutoKillMain"
                 : $"AutoKill - {session.Target.Name}###AutoKillMain";
-            DrawRun(mobs, session);
-            return;
-        }
 
-        WindowName = "AutoKill###AutoKillMain";
+            if (!browsingMeanwhile)
+            {
+                DrawRun(mobs, session);
+                return;
+            }
+
+            DrawMeanwhile(session);
+        }
+        else
+        {
+            WindowName = "AutoKill###AutoKillMain";
+        }
 
         if (plannedTarget is not null)
         {
@@ -126,6 +144,22 @@ public sealed class MainWindow : Window
         }
 
         DrawBrowse(mobs);
+    }
+
+    /// <summary>
+    /// One line about the run this window has stepped away from, and the way
+    /// back to it.
+    /// </summary>
+    private void DrawMeanwhile(FarmSession session)
+    {
+        Style.Place(session.Target.Name);
+
+        ImGui.SameLine();
+        if (ImGui.SmallButton("back to the run"))
+            browsingMeanwhile = false;
+
+        Style.Trailing($"{session.Progress.Kills} killed   {session.Progress.Elapsed:hh\\:mm\\:ss}");
+        ImGui.Separator();
     }
 
     private void DrawBrowse(MobIndex mobs)
@@ -604,6 +638,12 @@ public sealed class MainWindow : Window
             }
 
             Style.Explain("Move the stop line without stopping the run.");
+
+            ImGui.SameLine();
+            if (ImGui.SmallButton("browse"))
+                browsingMeanwhile = true;
+
+            Style.Explain("Look something else up while this keeps going.");
             return;
         }
 
@@ -772,8 +812,18 @@ public sealed class MainWindow : Window
             Style.Gap(2f);
         }
 
+        // Never two runs. Starting used to quietly replace whatever was going,
+        // which was fine when the plan could not be reached mid-run and is a
+        // trap now that it can.
+        var busy = farming.Running;
+        if (busy)
+        {
+            ImGui.TextColored(Style.Muted, "a run is already going; stop it to start this one");
+            Style.Gap(2f);
+        }
+
         // The one thing on this screen worth pressing, coloured like it.
-        using (ImRaii.Disabled(job.Blocked))
+        using (ImRaii.Disabled(job.Blocked || busy))
         {
             ImGui.PushStyleColor(ImGuiCol.Button, Style.Accent with { W = 0.85f });
             ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Style.Accent);
@@ -934,6 +984,17 @@ public sealed class MainWindow : Window
         ImGui.Separator();
         Style.Heading("While it runs");
 
+        var overlay = config.ShowOverlay;
+        if (ImGui.Checkbox("small progress window while it runs", ref overlay))
+        {
+            config.ShowOverlay = overlay;
+            saveConfig();
+        }
+
+        Style.Muffled("Floats beside the game with the bars and the Pause and Stop");
+        Style.Muffled("buttons, and goes away when the run ends.");
+
+        Style.Gap(2f);
         var notifications = config.Notifications;
         if (ImGui.Checkbox("announce starts and finishes", ref notifications))
         {

@@ -73,6 +73,7 @@ public sealed class Plugin : IDalamudPlugin
         mainWindow = new MainWindow(
             () => index, farming, Textures, config, observations, history, artisan, hunts, fates, Save);
         windows.AddWindow(mainWindow);
+        windows.AddWindow(new RunOverlay(() => index, farming, config));
 
         PluginInterface.UiBuilder.Draw += windows.Draw;
         PluginInterface.UiBuilder.OpenMainUi += OpenMainUi;

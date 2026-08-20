@@ -89,7 +89,9 @@ hour, so which field is better for something is answerable from your own runs.
 - **Planning**: the area you chose, and what should end the run. A map button flags
   the area on the game map. Nothing starts until you press Start.
 - **Running**: where it is, what it is doing, and how far along. Pause and Stop, and
-  the stop targets can be adjusted without stopping.
+  the stop targets can be adjusted without stopping. A compact overlay shows the same
+  at a glance beside the game, and the main window can go back to browsing while the
+  run keeps going.
 - **Finished**: what happened, until you dismiss it. Or farm the same area again.
 
 ### Settings

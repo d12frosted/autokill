@@ -80,6 +80,22 @@ reading the diff. Dates are when the tag went out.
   took. Which is the one honest basis for deciding whether it is worth going
   back.
 
+- **A small progress window while it runs.** The main window is usually behind
+  the game exactly when a run is going, so the run now also shows in a compact
+  overlay: the mob, the status, the bars, Pause and Stop. It appears when a run
+  starts, goes away when it ends, and can be turned off in Settings. The result
+  still lands in the main window, which has the room to say more.
+
+- **Browse while it runs.** The main window used to be locked to the run for
+  its whole length, but reading By drop during a twenty minute grind is how the
+  next run gets planned. A "browse" button on the run screen frees the window,
+  one line at the top says what is still going and leads back to it, and a
+  finish always brings the result forward. The one thing that stays locked is
+  the running goal, which is what the lock was ever for; adjust targets is the
+  door for that. Starting a second run while one is going is refused rather
+  than quietly replacing it, which was fine when the plan could not be reached
+  mid-run and would be a trap now.
+
 ### Changed
 
 - **Done lands somewhere useful.** Finishing a run picked off a crafting list
