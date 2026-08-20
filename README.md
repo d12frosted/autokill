@@ -66,6 +66,10 @@ against stops until you resume. Resume and it makes its own way back to the fiel
 proper links you can hover. The chat line is local only, like `/echo`, and it is still
 there when you come back.
 
+**Bring you home.** Optionally, a run that ends on its own teleports you back to an
+aetheryte in the zone you set off from. It waits out the combat the last kill leaves
+trailing, and a run you stop yourself stays put: you are standing right there.
+
 **Learn as it goes.** How quickly a place repopulates is not in any dataset, so AutoKill
 measures it and uses it to decide when a spot is worth returning to. The second run over
 the same ground routes better than the first.
@@ -90,6 +94,7 @@ one is a single click rather than setting it up again.
 | mount and fly beyond | how far a destination has to be before it is worth mounting. Lower means mounting for almost every hop; higher keeps it on foot inside an area |
 | wait at an empty spot | how long to give a cleared knot before moving on round the circuit |
 | announce starts and finishes | the chat line and toast |
+| teleport back when a run ends | back to the zone the run set off from, when it ends on its own |
 | record runs to a trace file | writes what each run did, for working out afterwards where the time went |
 | going as the wrong job | change job automatically, refuse to start and say why, or go anyway |
 | go as | which job to reach for when changing, out of the ones you have a gearset for |

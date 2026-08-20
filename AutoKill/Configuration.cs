@@ -57,6 +57,13 @@ public sealed class Configuration : IPluginConfiguration
     /// </remarks>
     public uint PreferredJob { get; set; }
 
+    /// <summary>
+    /// Teleport back to the zone a run set off from, once it ends on its own.
+    /// A run stopped by hand stays put: whoever pressed the button is standing
+    /// right there and can decide for themselves.
+    /// </summary>
+    public bool ReturnWhenDone { get; set; }
+
     /// <summary>Keep the chocobo companion out while farming.</summary>
     public bool SummonCompanion { get; set; }
 

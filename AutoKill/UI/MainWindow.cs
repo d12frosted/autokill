@@ -674,6 +674,20 @@ public sealed class MainWindow : Window
         else
             Style.Muffled("no target set, so it will run until you stop it");
 
+        // On the plan rather than only in Settings, because whether coming home
+        // is wanted depends on the run: it sticks as the default for the next
+        // one, which is what a preference asked at the right moment does.
+        var back = config.ReturnWhenDone;
+        if (ImGui.Checkbox("teleport back here when it ends", ref back))
+        {
+            config.ReturnWhenDone = back;
+            saveConfig();
+        }
+
+        Style.Explain(
+            "Back to an aetheryte in this zone, once the run ends on its own. "
+            + "A run you stop yourself stays where it is.");
+
         ImGui.Separator();
         Style.Gap(2f);
 
@@ -829,6 +843,17 @@ public sealed class MainWindow : Window
         ImGui.Separator();
         Style.Heading("Afterwards");
 
+        var returnWhenDone = config.ReturnWhenDone;
+        if (ImGui.Checkbox("teleport back when a run ends", ref returnWhenDone))
+        {
+            config.ReturnWhenDone = returnWhenDone;
+            saveConfig();
+        }
+
+        Style.Muffled("To an aetheryte in the zone the run set off from, once it ends");
+        Style.Muffled("on its own. A run you stop yourself stays where it is.");
+
+        Style.Gap(2f);
         var record = config.RecordRuns;
         if (ImGui.Checkbox("record runs to a trace file", ref record))
         {
