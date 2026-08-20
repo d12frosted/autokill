@@ -12,12 +12,19 @@ Movement is [vnavmesh](https://github.com/awgil/ffxiv_navmesh). Fighting is whic
 rotation plugin you already use. AutoKill decides where to go and what to attack, and
 lets those do what they are good at.
 
+<p align="center">
+  <img src="assets/screenshot-run.png" alt="A run in progress: killing Lesser Apollyon in Kozama'uka, 3 of 20 shells collected" width="640"><br>
+  <em>Twenty shells wanted, three in, and it says what it is doing about the rest.</em>
+</p>
+
 ## Automation risk
 
 This drives your character unattended in the open world. That is against the game's terms
 of service and people do lose accounts for it. Your call.
 
 ## What it does
+
+### Choosing a target
 
 **Find something to farm.** Search by mob name, or search for an item and see where to go
 for it, with icons, zones and how thickly each place spawns. Mobs that drop something but
@@ -37,12 +44,19 @@ set as well as the target. Subcrafts are followed down, because a mob drop is ne
 item on the list, it is a hide two steps under it. Or press one button and farm the
 whole list: one run per material, zone by zone, each going for what is still missing.
 
+<p align="center">
+  <img src="assets/screenshot-list.png" alt="A crafting list with every mob-dropped material gathered" width="640"><br>
+  <em>A crafting list read from Artisan. This one is finished; yours will say what is owed.</em>
+</p>
+
 **Or work off a hunt bill.** The Hunts tab shows the bills you are carrying and what is
 left on each. Pick a target and it goes to that mob, in the zone the bill names, with the
 kill count set to what is still owed. That includes the weekly elite bill: every one of
 those names a B rank, and if the mark is not up the run patrols its spawn points until it
 is. Targets that only appear inside a FATE say so, and can only be picked while that FATE
 is running, in which case it goes to where the FATE actually is.
+
+### The run
 
 **Farm an area, not a spot.** Mobs of one kind are spread over a field in several loose
 knots. AutoKill treats the whole field as one place, flies a circuit around it, and moves
@@ -66,6 +80,14 @@ duty taking you away all stop it, and it says so. It can also be paused from the
 Paused, it keeps counting what it can still see, and the clock a time limit runs
 against stops until you resume. Resume and it makes its own way back to the field.
 
+**Learn as it goes.** How quickly a place repopulates is not in any dataset, so AutoKill
+measures it and uses it to decide when a spot is worth returning to. The second run over
+the same ground routes better than the first. A running goal says roughly how much
+longer it should take at the pace shown so far, and planning a field you have farmed
+before says what it gave last time.
+
+### Afterwards
+
 **Tell you it finished.** A chat line and a toast when the run ends, with the items as
 proper links you can hover. The chat line is local only, like `/echo`, and it is still
 there when you come back.
@@ -74,12 +96,6 @@ there when you come back.
 aetheryte in the zone you set off from, or to your home point, your pick. It waits out
 the combat the last kill leaves trailing, and a run you stop yourself stays put: you
 are standing right there.
-
-**Learn as it goes.** How quickly a place repopulates is not in any dataset, so AutoKill
-measures it and uses it to decide when a spot is worth returning to. The second run over
-the same ground routes better than the first. A running goal says roughly how much
-longer it should take at the pace shown so far, and planning a field you have farmed
-before says what it gave last time.
 
 **Remember what you ran.** Finished runs are kept with what you asked for, so repeating
 one is a single click rather than setting it up again. Each shows kills and items per
