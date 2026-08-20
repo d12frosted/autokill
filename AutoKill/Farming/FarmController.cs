@@ -6,6 +6,14 @@ using Dalamud.Plugin.Services;
 
 namespace AutoKill.Farming;
 
+/// <summary>
+/// One stop of a run over a crafting list: a field, the material it is for,
+/// and how much of it the list wants in total. How much is still missing is
+/// worked out when the leg starts, not when it is queued, because the stops
+/// before it change what the bags hold.
+/// </summary>
+public readonly record struct FarmLeg(FarmTarget Target, uint ItemId, int Required);
+
 /// <summary>Owns the running session and ticks it.</summary>
 public sealed class FarmController : IDisposable
 {
@@ -81,6 +89,13 @@ public sealed class FarmController : IDisposable
     private uint homeTerritory;
     private Homecoming? homecoming;
 
+    // The stops still ahead of the current session, when a whole crafting list
+    // is being farmed rather than one thing.
+    private readonly Queue<FarmLeg> legs = new();
+
+    /// <summary>How many stops are queued after the running one.</summary>
+    public int Queued => legs.Count;
+
     public bool Running => Current is { Phase: not FarmPhase.Finished };
 
     public Requirements Requirements { get; }
@@ -101,6 +116,30 @@ public sealed class FarmController : IDisposable
     /// </remarks>
     public bool Start(FarmTarget target, StopConditions conditions)
     {
+        legs.Clear();
+        homecoming = null;
+        homeTerritory = clientState.TerritoryType;
+        return StartCore(target, conditions);
+    }
+
+    /// <summary>
+    /// Farm a whole list of stops, one after another. Each leg's goal is
+    /// worked out when it starts, from what the bags hold by then, so a stop
+    /// that turns out to be covered is skipped rather than farmed for nothing.
+    /// </summary>
+    public void StartMany(IEnumerable<FarmLeg> list)
+    {
+        legs.Clear();
+        foreach (var leg in list)
+            legs.Enqueue(leg);
+
+        homecoming = null;
+        homeTerritory = clientState.TerritoryType;
+        StartNextLeg();
+    }
+
+    private bool StartCore(FarmTarget target, StopConditions conditions)
+    {
         var job = jobs.Plan(target.Area.Level);
         if (job.Says is { } says)
             notifier.Info(says);
@@ -117,9 +156,7 @@ public sealed class FarmController : IDisposable
             return false;
         }
 
-        homecoming = null;
-        Stop("replaced");
-        homeTerritory = clientState.TerritoryType;
+        Halt("replaced");
         Current = new FarmSession(
             target, conditions, navmesh, wrath, clientState, objects, targets, data, condition, notifier, itemName, config, newRecorder(), observations, history, log);
         log.Information(
@@ -128,10 +165,43 @@ public sealed class FarmController : IDisposable
         return true;
     }
 
+    private void StartNextLeg()
+    {
+        while (legs.TryDequeue(out var leg))
+        {
+            var missing = CraftingLists.StillNeeded(leg.Required, Bags.CountOf(leg.ItemId));
+            if (missing == 0)
+                continue;
+
+            var conditions = new StopConditions(
+                [
+                    new ItemCountCondition(leg.ItemId, missing),
+                    new DeathCondition(),
+                    new InventoryFullCondition(),
+                ],
+                StopMode.Any);
+
+            // A stop the job checks refuse has said why already; the stops
+            // after it are still worth trying.
+            if (!StartCore(leg.Target, conditions))
+                continue;
+
+            if (legs.Count > 0)
+                notifier.Info($"{legs.Count} more stop(s) on the list after this one.");
+            return;
+        }
+    }
+
     public void Stop(string reason = "stopped")
     {
-        Current?.Finish(reason);
+        // Stopping by hand stops the whole list; leaving the rest queued would
+        // relaunch it the moment this finish was noticed.
+        legs.Clear();
+        Halt(reason);
     }
+
+    /// <summary>End the running session without touching the queue.</summary>
+    private void Halt(string reason) => Current?.Finish(reason);
 
     public void Pause() => Current?.Pause("waiting on you");
 
@@ -164,13 +234,39 @@ public sealed class FarmController : IDisposable
             session.Finish("something went wrong, see the log");
         }
 
-        // Only a finish that happened inside the tick starts the trip back.
-        // The Stop button finishes a session between ticks, and whoever pressed
-        // it is standing right there: teleporting them away would be one more
-        // way of fighting the player for the character.
-        if (session.Phase == FarmPhase.Finished)
-            ConsiderHome();
+        // Only a finish that happened inside the tick moves on to the next
+        // stop or starts the trip back. The Stop button finishes a session
+        // between ticks and clears the queue itself, and whoever pressed it is
+        // standing right there: teleporting them away would be one more way of
+        // fighting the player for the character.
+        if (session.Phase != FarmPhase.Finished)
+            return;
+
+        if (legs.Count > 0)
+        {
+            // Only a leg that got what it came for hands over to the next.
+            // Dying, full bags or an unreachable field would fail every stop
+            // after it the same way, and marching on through them says nothing
+            // a second failure has not already said.
+            if (LegDone(session))
+            {
+                StartNextLeg();
+                if (Running)
+                    return;
+            }
+            else
+            {
+                legs.Clear();
+                notifier.Info("the rest of the list stops here too.");
+            }
+        }
+
+        ConsiderHome();
     }
+
+    private static bool LegDone(FarmSession session) =>
+        session.Outcome is { } outcome
+        && session.Conditions.Conditions.OfType<ItemCountCondition>().Any(c => c.IsMet(outcome));
 
     private void ConsiderHome()
     {

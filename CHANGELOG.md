@@ -96,6 +96,16 @@ reading the diff. Dates are when the tag went out.
   than quietly replacing it, which was fine when the plan could not be reached
   mid-run and would be a trap now.
 
+- **Farm the whole list.** The crafting list view gets one button that farms
+  every outstanding material in turn: one run per material, stops in the same
+  zone kept together, each going for exactly what is still missing when its
+  turn comes, so whatever earlier stops looted is already counted. The run
+  screen and the overlay say how many stops are left. Dying, full bags or
+  stopping by hand ends the whole list, since every stop after would fail the
+  same way; a stop whose material turns out to be covered is skipped rather
+  than farmed for nothing. Materials with no recorded field are named and left
+  behind rather than silently missing.
+
 ### Changed
 
 - **Done lands somewhere useful.** Finishing a run picked off a crafting list

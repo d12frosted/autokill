@@ -78,6 +78,9 @@ public sealed class RunOverlay : Window
             paused ? $"Paused: {session.Status}" : session.Status);
         ImGui.PopTextWrapPos();
 
+        if (farming.Queued > 0)
+            Style.Muffled($"then {farming.Queued} more stop(s)");
+
         var kills = session.Conditions.Conditions.OfType<KillCountCondition>().FirstOrDefault();
         if (kills is null)
         {

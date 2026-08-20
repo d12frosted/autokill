@@ -551,6 +551,9 @@ public sealed class MainWindow : Window
             finished ? Style.Good : paused ? Style.Accent : Style.Muted,
             finished ? $"Finished: {session.Status}" : $"{session.Phase}: {session.Status}");
 
+        if (!finished && farming.Queued > 0)
+            Style.Muffled($"then {farming.Queued} more stop(s) for the list");
+
         Style.Gap();
         Style.Heading("Progress");
 
@@ -1534,6 +1537,8 @@ public sealed class MainWindow : Window
             return;
         }
 
+        DrawFarmTheList(mobs, farmable);
+
         foreach (var material in farmable)
         {
             using var id = ImRaii.PushId((int)material.ItemId);
@@ -1571,6 +1576,55 @@ public sealed class MainWindow : Window
             Style.Gap();
             Style.Muffled($"{rest} other material(s) are gathered, bought or crafted.");
         }
+    }
+
+    /// <summary>
+    /// One button for the whole list: every outstanding material with a known
+    /// field, farmed one stop after another.
+    /// </summary>
+    /// <remarks>
+    /// Stops in the same zone are kept together, since the teleport between
+    /// zones is the expensive part of the trip. Each stop's goal is worked out
+    /// when it starts rather than here, so whatever earlier stops put in the
+    /// bags is already counted. What cannot be taken along is said: a material
+    /// with no recorded field would otherwise just quietly not turn up.
+    /// </remarks>
+    private void DrawFarmTheList(MobIndex mobs, IReadOnlyList<ListMaterial> farmable)
+    {
+        var wanted = farmable
+            .Where(m => CraftingLists.StillNeeded(m.Required, Bags.CountOf(m.ItemId)) > 0)
+            .ToList();
+
+        if (wanted.Count == 0)
+            return;
+
+        var legs = wanted
+            .Select(m => (Material: m, Field: mobs.FieldsDropping(m.ItemId).FirstOrDefault()))
+            .Where(x => x.Field is not null)
+            .Select(x => new FarmLeg(x.Field!, x.Material.ItemId, x.Material.Required))
+            .GroupBy(leg => leg.Target.Area.TerritoryTypeId)
+            .SelectMany(zone => zone)
+            .ToList();
+
+        if (legs.Count == 0)
+            return;
+
+        using (ImRaii.Disabled(farming.Running))
+        {
+            if (ImGui.Button(legs.Count == 1
+                    ? "Farm what is left"
+                    : $"Farm the whole list, {legs.Count} stops"))
+            {
+                farming.StartMany(legs);
+            }
+        }
+
+        Style.Explain("One run per material, in zone order, each going for what is still missing.");
+
+        if (legs.Count < wanted.Count)
+            Style.Muffled($"{wanted.Count - legs.Count} of them have nowhere recorded, so they stay behind.");
+
+        ImGui.Separator();
     }
 
     /// <summary>Choose an item to go looking for, and how much of it.</summary>

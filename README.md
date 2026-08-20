@@ -32,7 +32,8 @@ want.
 lists. Pick one and it shows the materials a mob can supply, how many are in your bags
 and how many are still to find. Choosing one carries the amount through, so the goal is
 set as well as the target. Subcrafts are followed down, because a mob drop is never the
-item on the list, it is a hide two steps under it.
+item on the list, it is a hide two steps under it. Or press one button and farm the
+whole list: one run per material, zone by zone, each going for what is still missing.
 
 **Or work off a hunt bill.** The Hunts tab shows the bills you are carrying and what is
 left on each. Pick a target and it goes to that mob, in the zone the bill names, with the
