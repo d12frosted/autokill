@@ -147,7 +147,7 @@ public sealed class WrathIpc : IDisposable
 
         lastAttempt = DateTime.UtcNow;
 
-        if (!Registered())
+        if (Lease() is null)
             return false;
 
         if (!Set(id => setAutoRotationState.InvokeFunc(id, true), "enable auto-rotation"))
@@ -227,18 +227,24 @@ public sealed class WrathIpc : IDisposable
                 : $"Wrath Combo ended the lease (reason {reason}), so it will be taken again. {detail}");
     }
 
-    private bool Registered()
+    /// <summary>
+    /// The lease held, taking one if there is none, and null if Wrath would not
+    /// grant one. Handed back rather than read off the field afterwards: the
+    /// callback that ends a lease can clear the field at any point, including
+    /// while asking for this one.
+    /// </summary>
+    private Guid? Lease()
     {
-        if (lease is not null)
-            return true;
+        if (lease is { } held)
+            return held;
 
         // The prefix names the IPC Wrath calls when the lease ends.
         lease = Call<Guid?>(() => register.InvokeFunc("AutoKill", "AutoKill", "AutoKill"), null);
-        if (lease is not null)
-            return true;
+        if (lease is { } granted)
+            return granted;
 
         log.Warning("Wrath Combo would not grant a lease, so no rotation will run.");
-        return false;
+        return null;
     }
 
     private void Configure(int option, bool value) =>
@@ -266,10 +272,10 @@ public sealed class WrathIpc : IDisposable
         // A refused lease is spent, so the one thing worth doing is asking for
         // another and trying once. Twice would be a loop.
         lease = null;
-        if (!retry || !Registered())
+        if (!retry || Lease() is not { } fresh)
             return false;
 
-        var second = Call(() => call(lease.Value), InvalidLease);
+        var second = Call(() => call(fresh), InvalidLease);
         if (second is Okay or OkayWorking)
             return true;
 
