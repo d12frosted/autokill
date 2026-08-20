@@ -50,6 +50,12 @@ reading the diff. Dates are when the tag went out.
   move. A line moved behind where the run already stands ends it on the next
   tick, which is what asking for less than you have means.
 
+- **A sound when a run ends, if you want one.** The chat line and the toast are
+  silent, and a run ends precisely when you are looking at something else. Pick
+  one of the game's sixteen chat sounds in Settings, the same ones `<se.1>`
+  through `<se.16>` play, with a button to hear it before committing. Off by
+  default.
+
 ### Changed
 
 - **Done lands somewhere useful.** Finishing a run picked off a crafting list

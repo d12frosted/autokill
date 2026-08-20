@@ -58,7 +58,11 @@ public sealed class Plugin : IDalamudPlugin
         var fates = new Fates(FateTable, ClientState);
 
         var navmesh = new NavmeshIpc(PluginInterface, Log);
-        notifier = new Notifier(ChatGui, Toast) { Enabled = config.Notifications };
+        notifier = new Notifier(ChatGui, Toast)
+        {
+            Enabled = config.Notifications,
+            Chime = config.FinishSound,
+        };
         wrath = new WrathIpc(PluginInterface, Log);
         var requirements = new Requirements(PluginInterface, navmesh, wrath);
         var jobs = new Jobs(Objects, DataManager, Condition, config, Log);
@@ -127,6 +131,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         PluginInterface.SavePluginConfig(config);
         notifier.Enabled = config.Notifications;
+        notifier.Chime = config.FinishSound;
     }
 
     private void OpenMainUi() => mainWindow.IsOpen = true;

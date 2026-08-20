@@ -1,5 +1,6 @@
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.UI;
 
 namespace AutoKill.Farming;
 
@@ -17,6 +18,24 @@ public sealed class Notifier(IChatGui chat, IToastGui toast)
 
     public bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// Which of the game's chat sounds to play when a run ends, zero for none.
+    /// The chat line and toast are silent, and a run ends precisely when nobody
+    /// is looking at the screen.
+    /// </summary>
+    public int Chime { get; set; }
+
+    /// <summary>
+    /// One of the sixteen chat sounds, the same ones &lt;se.1&gt; through
+    /// &lt;se.16&gt; play. Static so the settings screen can preview a sound
+    /// without pretending a run finished.
+    /// </summary>
+    public static void Ring(int sound)
+    {
+        if (sound is >= 1 and <= 16)
+            UIGlobals.PlayChatSoundEffect((uint)sound);
+    }
+
     /// <summary>Worth a line in the log, not worth interrupting anyone.</summary>
     public void Info(string message)
     {
@@ -32,6 +51,7 @@ public sealed class Notifier(IChatGui chat, IToastGui toast)
 
         chat.Print(Prefix + message);
         toast.ShowNormal(message);
+        Ring(Chime);
     }
 
     /// <summary>
@@ -46,5 +66,6 @@ public sealed class Notifier(IChatGui chat, IToastGui toast)
 
         chat.Print(new SeStringBuilder().AddText(Prefix).Append(chatMessage).Build());
         toast.ShowNormal(toastMessage);
+        Ring(Chime);
     }
 }

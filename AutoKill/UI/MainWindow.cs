@@ -887,6 +887,24 @@ public sealed class MainWindow : Window
             saveConfig();
         }
 
+        // The chat line and toast are silent, and a run ends precisely when
+        // nobody is looking at the screen.
+        var sound = config.FinishSound;
+        ImGui.SetNextItemWidth(160);
+        if (ImGui.SliderInt(
+                "sound when a run ends", ref sound, 0, 16, sound == 0 ? "none" : $"<se.{sound}>"))
+        {
+            config.FinishSound = sound;
+            saveConfig();
+        }
+
+        if (config.FinishSound > 0)
+        {
+            ImGui.SameLine();
+            if (ImGui.SmallButton("play"))
+                Notifier.Ring(config.FinishSound);
+        }
+
         var companion = config.SummonCompanion;
         if (ImGui.Checkbox("keep the chocobo out", ref companion))
         {

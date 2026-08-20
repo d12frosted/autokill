@@ -27,6 +27,12 @@ public sealed class Configuration : IPluginConfiguration
     public bool Notifications { get; set; } = true;
 
     /// <summary>
+    /// The chat sound to play when a run ends, 1 to 16 as in &lt;se.1&gt;, or
+    /// zero for silence. Off by default: a sound nobody asked for is noise.
+    /// </summary>
+    public int FinishSound { get; set; }
+
+    /// <summary>
     /// Write a trace of each run to disk, for working out afterwards where the
     /// time actually went.
     /// </summary>

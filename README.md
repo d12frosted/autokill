@@ -95,6 +95,7 @@ one is a single click rather than setting it up again.
 | mount and fly beyond | how far a destination has to be before it is worth mounting. Lower means mounting for almost every hop; higher keeps it on foot inside an area |
 | wait at an empty spot | how long to give a cleared knot before moving on round the circuit |
 | announce starts and finishes | the chat line and toast |
+| sound when a run ends | one of the game's chat sounds, or none |
 | teleport back when a run ends | back to the zone the run set off from, when it ends on its own |
 | record runs to a trace file | writes what each run did, for working out afterwards where the time went |
 | going as the wrong job | change job automatically, refuse to start and say why, or go anyway |
