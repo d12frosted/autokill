@@ -59,6 +59,18 @@ reading the diff. Dates are when the tag went out.
 
 ### Fixed
 
+- **A refused dismount no longer holds the run in the air.** The game will not
+  dismount everywhere: over water, straddling a fence, hovering where the drop
+  is not a landing. The run used to answer that by pressing the button again
+  every half second, forever, with the status stuck on "dismounting". Worse, a
+  mob pacing underneath kept resetting the clock that would otherwise have
+  called it stuck, so it did not even give up.
+
+  When the presses have got nowhere for five seconds it now rides down to the
+  target's own feet and gets off there. The target is standing on that ground,
+  so that ground can be stood on. If the spot it lands at still refuses, it
+  waits out the same patience and tries again from there.
+
 - **A mob it cannot get to no longer ends the run.** Targets are picked by
   straight line distance, which says nothing about whether there is a way there.
   Across a gorge, up a cliff, on a rock the navmesh does not cover, or simply

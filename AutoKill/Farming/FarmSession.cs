@@ -79,6 +79,11 @@ public sealed class FarmSession
     // waiting a whole mount cooldown between attempts is most of the time spent
     // getting out of the saddle.
     private static readonly TimeSpan DismountRetry = TimeSpan.FromMilliseconds(400);
+
+    // How long the presses may keep being refused before the trouble is taken
+    // to be the spot rather than the timing. Long enough for a flying dismount,
+    // which is a descent and then a second press from the ground.
+    private static readonly TimeSpan DismountPatience = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan SightingInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan StuckAfter = TimeSpan.FromSeconds(5);
@@ -154,6 +159,8 @@ public sealed class FarmSession
     private DateTime? emptySince;
     private ulong chosen;
     private Closeness approach;
+    private DateTime? dismountingSince;
+    private bool landing;
     private Vector3 lastPosition;
     private DateTime? stuckSince;
     private bool stuckReported;
@@ -898,6 +905,8 @@ public sealed class FarmSession
         {
             chosen = quarry.GameObjectId;
             approach = Closeness.AtRange;
+            dismountingSince = null;
+            landing = false;
             recorder?.Write("target", new
             {
                 id = quarry.GameObjectId,
@@ -997,6 +1006,11 @@ public sealed class FarmSession
         // had been told to and then decided it was still too far, forever.
         if (distance > reach)
         {
+            // Not standing over it any more, so wherever the saddle was stuck
+            // is behind us.
+            dismountingSince = null;
+            landing = false;
+
             Status = $"going to a {target.NameOf(quarry.NameId)}, {distance:F0}y away";
 
             // Stop a little inside reach so arriving is unambiguous rather than
@@ -1020,9 +1034,49 @@ public sealed class FarmSession
         // from it, and in the air there is nothing to stand on.
         if (PlayerActions.IsFlying(condition) || PlayerActions.IsMounted(condition))
         {
+            dismountingSince ??= DateTime.UtcNow;
+
+            // On the way to somewhere it can land. This route is the answer to
+            // being stuck, so it is the one route the branch does not stop.
+            if (landing)
+            {
+                if (navmesh.Moving)
+                {
+                    Status = "flying somewhere it can land";
+                    return;
+                }
+
+                // Arrived, or the route was refused. Either way the presses
+                // start over from here, with the full patience again.
+                landing = false;
+                dismountingSince = DateTime.UtcNow;
+            }
+
             Status = "dismounting";
             if (navmesh.Moving)
                 navmesh.Stop();
+
+            // The game refuses to dismount in plenty of places: over water,
+            // straddling a fence, hovering where the drop is not a landing.
+            // Pressing harder does not change its mind, so when the presses
+            // have got nowhere, ride down to the quarry's own feet. It is
+            // standing on them, so that ground at least can be stood on.
+            if (DateTime.UtcNow - dismountingSince >= DismountPatience)
+            {
+                landing = true;
+                recorder?.Write("land", new
+                {
+                    id = quarry.GameObjectId,
+                    away = Math.Round(distance, 1),
+                    flying = PlayerActions.IsFlying(condition),
+                });
+                Moved(
+                    navmesh.MoveCloseTo(quarry.Position, MeleeRange * 0.8f, ShouldFly()),
+                    quarry.Position,
+                    MeleeRange * 0.8f);
+                return;
+            }
+
             if (DateTime.UtcNow - lastMountAction >= DismountRetry)
             {
                 lastMountAction = DateTime.UtcNow;
@@ -1038,6 +1092,10 @@ public sealed class FarmSession
             Status = "dismounting";
             return;
         }
+
+        // Out of the saddle, so however it went, the dismounting is over.
+        dismountingSince = null;
+        landing = false;
 
         KeepCompanion();
 
