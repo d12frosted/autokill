@@ -1,5 +1,7 @@
 # AutoKill
 
+[![Sponsor](https://img.shields.io/badge/Sponsor-d12frosted-pink?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/d12frosted)
+
 <img src="assets/icon.svg" alt="" width="120" align="right">
 
 Pick a mob, or pick something you want it to drop, and AutoKill goes and farms it. It
@@ -213,3 +215,9 @@ See [CHANGELOG.md](CHANGELOG.md).
 See [docs/adr](docs/adr) for the decisions and their reasons, including where the data
 comes from, why spawn positions carry no height, and why a run is a state machine rather
 than a sequence.
+
+## Support
+
+If you enjoy this project, you can support its development via
+[GitHub Sponsors](https://github.com/sponsors/d12frosted) or
+[Patreon](https://www.patreon.com/d12frosted).
