@@ -576,7 +576,10 @@ public sealed class MainWindow : Window
         }
 
         if (ImGui.Button("Done", new Vector2(120f, 0f)))
+        {
             resultDismissed = true;
+            StepBack();
+        }
 
         ImGui.SameLine();
         if (!ImGui.Button("Farm this again"))
@@ -584,6 +587,32 @@ public sealed class MainWindow : Window
 
         resultDismissed = true;
         Plan(session.Target);
+    }
+
+    /// <summary>
+    /// Land somewhere the finished run makes useful.
+    /// </summary>
+    /// <remarks>
+    /// A run picked off a crafting list ends back on that list when the bags now
+    /// hold enough of the material, with the counts fresh and the next thing to
+    /// farm in view. Landing on the material's own fields, which is where the
+    /// window would otherwise return, offers to farm the one thing that is done.
+    /// A material still short stays selected, since its fields are still the
+    /// business at hand. Judged by the bags rather than by what the run was
+    /// asked for, because the list is fed by what is held, not by what one run
+    /// set out to get.
+    /// </remarks>
+    private void StepBack()
+    {
+        if (craftingList is null || selectedItem == 0)
+            return;
+
+        var material = craftingMaterials.FirstOrDefault(m => m.ItemId == selectedItem);
+        if (material is null)
+            return;
+
+        if (CraftingLists.StillNeeded(material.Required, Bags.CountOf(material.ItemId)) == 0)
+            selectedItem = 0;
     }
 
     private void DrawPlan(MobIndex mobs, FarmTarget target)

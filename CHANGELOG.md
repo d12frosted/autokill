@@ -30,6 +30,15 @@ reading the diff. Dates are when the tag went out.
   make the run immediately try to teleport back to the field. Now it pauses and
   says why. Resume when you are done and it makes its own way back.
 
+### Changed
+
+- **Done lands somewhere useful.** Finishing a run picked off a crafting list
+  used to drop you back on that material's field list, which is the one screen
+  you no longer need once the bags hold enough. Now, when the material is
+  gathered, Done lands on the list itself, counts fresh, with the next thing to
+  farm in view. A material still short keeps its fields on screen, since they
+  are still the business at hand.
+
 ## 0.0.4 - 2026-08-20
 
 ### Added
