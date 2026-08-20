@@ -17,6 +17,7 @@ public sealed class FarmController : IDisposable
     private readonly IDataManager data;
     private readonly ICondition condition;
     private readonly Notifier notifier;
+    private readonly Jobs jobs;
     private readonly Func<uint, string> itemName;
     private readonly Configuration config;
     private readonly Func<RunRecorder?> newRecorder;
@@ -35,6 +36,7 @@ public sealed class FarmController : IDisposable
         ICondition condition,
         Notifier notifier,
         Requirements requirements,
+        Jobs jobs,
         Func<uint, string> itemName,
         Configuration config,
         Func<RunRecorder?> newRecorder,
@@ -52,6 +54,7 @@ public sealed class FarmController : IDisposable
         this.condition = condition;
         this.notifier = notifier;
         Requirements = requirements;
+        this.jobs = jobs;
         this.itemName = itemName;
         this.config = config;
         this.newRecorder = newRecorder;
@@ -70,14 +73,43 @@ public sealed class FarmController : IDisposable
 
     public string? Blocker => Requirements.Blocker;
 
-    public void Start(FarmTarget target, StopConditions conditions)
+    public Jobs Jobs => jobs;
+
+    /// <summary>
+    /// Go after this, unless the character is in no state to. False means
+    /// nothing started and the reason has already been said out loud.
+    /// </summary>
+    /// <remarks>
+    /// The window checks the same thing while the target is on screen and greys
+    /// the button out, so getting here with a bad job means something changed
+    /// between the last frame and the press. Checked again anyway, since the one
+    /// place it must not be wrong is the moment it acts.
+    /// </remarks>
+    public bool Start(FarmTarget target, StopConditions conditions)
     {
+        var job = jobs.Plan(target.Area.Level);
+        if (job.Says is { } says)
+            notifier.Info(says);
+
+        if (job.Blocked)
+        {
+            log.Information($"Not farming {target.Name}: {job.Says}");
+            return false;
+        }
+
+        if (job.Change is { } change && !jobs.Equip(change))
+        {
+            notifier.Info($"could not put {change.GearsetName} on, so nothing started.");
+            return false;
+        }
+
         Stop("replaced");
         Current = new FarmSession(
             target, conditions, navmesh, wrath, clientState, objects, targets, data, condition, notifier, itemName, config, newRecorder(), observations, history, log);
         log.Information(
             $"Farming {target.Name} in {target.Area.ZoneName}, {target.Area.Spots.Count} spot(s).");
         notifier.Info($"farming {target.Name} in {target.Area.ZoneName}.");
+        return true;
     }
 
     public void Stop(string reason = "stopped")

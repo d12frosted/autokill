@@ -37,6 +37,30 @@ reading the diff. Dates are when the tag went out.
   mark is not up, the run patrols its spawn points until it is, which is what
   hunting one looks like by hand.
 
+- **It checks you can actually fight the thing first.** Starting a farm on a
+  crafter used to work perfectly: teleport, mount, fly to the field, walk up to a
+  mob and stand there, because there is no rotation to run on a Weaver. Starting
+  one twenty levels short of the field worked too, right up to dying in it. In
+  both cases nothing said why.
+
+  Before anything else happens, the run now compares you against the level of
+  what you picked. By default it changes job for you and goes. If you would
+  rather it did not touch your job, Settings has the other two answers: refuse to
+  start and say why, or say what is wrong and go anyway. Mobs a few levels up are
+  killable and that last one is there for people who know it.
+
+  Left to itself it picks something that kills things over something that
+  survives them, so a damage job goes before a tank and a tank before a healer,
+  and the highest of those. If you would rather it always reached for one job,
+  pick it in Settings and it will, whenever that job is up to the field. Only
+  jobs you have a gearset for are offered, since the game cannot put you in a job
+  with no gear.
+
+  It compares against the top of the field's range, since a field is patrolled
+  whole. Where no level was ever recorded it says nothing and starts, because
+  that is a gap in the data rather than a fact about the mob. A crafter is
+  refused either way; that half of the check needs no data.
+
 - **Levels, beside the names they belong to.** Every mob, field and place in the
   window now says what level the things standing there are, so a target can be
   ruled out before flying to it rather than after. Somewhere holding mobs of

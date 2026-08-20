@@ -623,18 +623,30 @@ public sealed class MainWindow : Window
         ImGui.Separator();
         Style.Gap(2f);
 
-        // The one thing on this screen worth pressing, coloured like it.
-        ImGui.PushStyleColor(ImGuiCol.Button, Style.Accent with { W = 0.85f });
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Style.Accent);
-        ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.12f, 0.10f, 0.08f, 1f));
-        var start = ImGui.Button("Start", new Vector2(120f, 0f));
-        ImGui.PopStyleColor(3);
-
-        if (start)
+        // Said before the button rather than after it. A crafter or a job twenty
+        // levels short ends the same way in both cases, and finding that out on
+        // arrival is finding it out too late.
+        var job = farming.Jobs.Plan(area.Level);
+        if (job.Says is { } says)
         {
-            resultDismissed = false;
-            farming.Start(target, BuildConditions());
-            ClearPlan();
+            ImGui.TextColored(job.Blocked ? Style.Bad : Style.Muted, says);
+            Style.Gap(2f);
+        }
+
+        // The one thing on this screen worth pressing, coloured like it.
+        using (ImRaii.Disabled(job.Blocked))
+        {
+            ImGui.PushStyleColor(ImGuiCol.Button, Style.Accent with { W = 0.85f });
+            ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Style.Accent);
+            ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.12f, 0.10f, 0.08f, 1f));
+            var start = ImGui.Button("Start", new Vector2(120f, 0f));
+            ImGui.PopStyleColor(3);
+
+            if (start && farming.Start(target, BuildConditions()))
+            {
+                resultDismissed = false;
+                ClearPlan();
+            }
         }
 
         ImGui.SameLine();
@@ -694,6 +706,34 @@ public sealed class MainWindow : Window
 
         Style.Muffled("Not a respawn wait: nothing comes back this quickly. It only stops");
         Style.Muffled("a moment with nothing in view from sending it somewhere else.");
+
+        Style.Gap();
+        ImGui.Separator();
+        Style.Heading("Going as the wrong job");
+
+        Style.Muffled("A crafter stands in the field doing nothing, and a battle job too");
+        Style.Muffled("far down dies in it. Neither says why, so this is checked first.");
+        Style.Gap(2f);
+
+        foreach (var (policy, label, detail) in JobPolicies)
+        {
+            if (ImGui.RadioButton(label, config.JobPolicy == policy))
+            {
+                config.JobPolicy = policy;
+                saveConfig();
+            }
+
+            Style.Explain(detail);
+
+            // Indented under the choice it belongs to. Left until after all
+            // three it reads as a detail of the last one, which is the single
+            // option it has nothing to do with.
+            if (policy != JobPolicy.Switch || config.JobPolicy != JobPolicy.Switch)
+                continue;
+
+            DrawPreferredJob();
+            Style.Gap(2f);
+        }
 
         Style.Gap();
         ImGui.Separator();
@@ -985,6 +1025,86 @@ public sealed class MainWindow : Window
                 + (own.Level is { } level ? $", {level}" : string.Empty));
         }
     }
+
+    /// <summary>
+    /// Which job to reach for when changing, out of the ones you have a gearset
+    /// for.
+    /// </summary>
+    /// <remarks>
+    /// Only the jobs you actually have kit for. Offering all twenty-odd would be
+    /// offering to put you in a job with no gear, which the game will not do and
+    /// nobody wants anyway.
+    ///
+    /// Left alone it picks whatever suits the field: something that kills things
+    /// before something that survives them, and the highest of those. A named
+    /// job wins over all of that, right up to the point where it cannot manage
+    /// the field, and then it is passed over rather than sent there to die.
+    /// </remarks>
+    private void DrawPreferredJob()
+    {
+        using var indent = ImRaii.PushIndent();
+
+        Style.Muffled("Only when a change is needed. A job already up to the field is left alone.");
+
+        var choices = farming.Jobs.Choices();
+        var preferred = choices.FirstOrDefault(job => job.ClassJobId == config.PreferredJob);
+
+        // Named in front of the box rather than behind it. ImGui puts a label
+        // after the control, and "go as" reads backwards when the answer to it
+        // has already been given.
+        ImGui.TextUnformatted("go as");
+        ImGui.SameLine();
+
+        ImGui.SetNextItemWidth(240);
+        if (!ImGui.BeginCombo("##go-as", preferred is null ? Suits : $"{preferred.Name}   Lv{preferred.Level}"))
+            return;
+
+        // Not one of the jobs, so it does not sit among them looking like one.
+        if (Style.Pick(
+                Suits,
+                "Something that kills things before something that survives them, highest first.",
+                FontAwesomeIcon.Dice,
+                config.PreferredJob == 0))
+        {
+            Prefer(0);
+        }
+
+        ImGui.Separator();
+
+        foreach (var job in choices)
+        {
+            using var id = ImRaii.PushId((int)job.ClassJobId);
+
+            if (Style.Pick(job.Name, null, FontAwesomeIcon.Khanda, job.ClassJobId == config.PreferredJob))
+                Prefer(job.ClassJobId);
+
+            Style.Trailing($"Lv{job.Level}");
+        }
+
+        ImGui.EndCombo();
+    }
+
+    private const string Suits = "whatever suits the field";
+
+    private void Prefer(uint classJobId)
+    {
+        config.PreferredJob = classJobId;
+        saveConfig();
+    }
+
+    /// <summary>
+    /// What can be done about a job that cannot manage what was picked, in the
+    /// order somebody would consider them.
+    /// </summary>
+    private static readonly (JobPolicy Policy, string Label, string Detail)[] JobPolicies =
+    [
+        (JobPolicy.Switch, "change job automatically",
+            "Puts on a gearset that is up to the field, before the run starts."),
+        (JobPolicy.Refuse, "refuse to start, and say why",
+            "Nothing is changed for you. Change job yourself and the run will start."),
+        (JobPolicy.Ignore, "go anyway",
+            "Says what is wrong and starts regardless. Mobs a few levels up are killable."),
+    ];
 
     private static string Where(FarmArea area) =>
         $"{area.ZoneName}   ({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})";

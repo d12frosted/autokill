@@ -45,6 +45,13 @@ is running, in which case it goes to where the FATE actually is.
 knots. AutoKill treats the whole field as one place, flies a circuit around it, and moves
 on when a knot is cleared instead of standing over a respawn timer.
 
+**Check you can fight it first.** A crafter walks to the field and stands in it, and a
+battle job well below the field dies in it, and neither says why. Every mob, field and
+place in the window shows its level, and starting a run compares you against it. By
+default it changes job for you and goes, preferring something that kills things over
+something that survives them; you can name a job to reach for instead, or tell it to
+refuse rather than change anything, or to go anyway.
+
 **Stop when you say.** Set any mix of a kill count, a time limit, and an amount of any
 item the mob drops, and choose whether the first target ends the run or all of them must
 be met. Dying or filling your bags always ends it.
@@ -78,6 +85,8 @@ one is a single click rather than setting it up again.
 | wait at an empty spot | how long to give a cleared knot before moving on round the circuit |
 | announce starts and finishes | the chat line and toast |
 | record runs to a trace file | writes what each run did, for working out afterwards where the time went |
+| going as the wrong job | change job automatically, refuse to start and say why, or go anyway |
+| go as | which job to reach for when changing, out of the ones you have a gearset for |
 
 ### Learned
 

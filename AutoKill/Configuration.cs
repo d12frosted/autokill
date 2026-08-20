@@ -1,3 +1,4 @@
+using AutoKill.Core;
 using AutoKill.Farming;
 using Dalamud.Configuration;
 
@@ -30,6 +31,31 @@ public sealed class Configuration : IPluginConfiguration
     /// time actually went.
     /// </summary>
     public bool RecordRuns { get; set; }
+
+    /// <summary>
+    /// What to do when the character cannot fight what was picked: a crafter, or
+    /// a battle job that has not got far enough up.
+    /// </summary>
+    /// <remarks>
+    /// Switching by default because the plugin already teleports, mounts and
+    /// fights on its own, and refusing to farm because the wrong gearset happens
+    /// to be on would be the one thing it made you do by hand.
+    /// </remarks>
+    public JobPolicy JobPolicy { get; set; } = JobPolicy.Switch;
+
+    /// <summary>
+    /// The ClassJob to reach for when changing, or zero for whatever suits the
+    /// field best.
+    /// </summary>
+    /// <remarks>
+    /// The job rather than the gearset. Two gearsets for one job are the same
+    /// answer to "what should I go as", and picking between them would be a
+    /// preference about gear rather than about the job.
+    ///
+    /// A named job that cannot manage the field is passed over rather than sent
+    /// there to die, so this is a preference and not an instruction.
+    /// </remarks>
+    public uint PreferredJob { get; set; }
 
     /// <summary>Keep the chocobo companion out while farming.</summary>
     public bool SummonCompanion { get; set; }
