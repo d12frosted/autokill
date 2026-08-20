@@ -9,6 +9,11 @@ people actually farm.
 So the plugin ships both. This produces the second half: map coordinates keyed
 by BNpcName, left unclustered on purpose, because clustering has to happen after
 the two sources are merged rather than within either one.
+
+Each point carries the level it was seen at, which is the only source that has
+one at all. It belongs to the point rather than to the mob: a fifth of the
+places in this data hold mobs of more than one level, and plenty of creatures
+stand at level 12 in one zone and level 60 in another.
 """
 
 from __future__ import annotations
@@ -16,13 +21,18 @@ from __future__ import annotations
 import json
 from typing import Any
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 
 
 def extract_positions(
     monsters: dict[str, Any], maps: dict[str, Any]
 ) -> dict[str, list[list[float]]]:
-    """Map coordinates per mob, as [mapId, x, y] triples."""
+    """Map coordinates per mob, as [mapId, x, y, level] rows.
+
+    A level of zero means unrecorded rather than level zero. Three percent of
+    the points have none, and 302 mobs have none anywhere, so the plugin has to
+    be able to tell that from a mob that is genuinely easy.
+    """
     out: dict[str, list[list[float]]] = {}
 
     for key, record in monsters.items():
@@ -39,7 +49,14 @@ def extract_positions(
             if not map_info or map_info.get("dungeon") or map_info.get("housing"):
                 continue
 
-            points.append([map_id, round(float(position["x"]), 1), round(float(position["y"]), 1)])
+            points.append(
+                [
+                    map_id,
+                    round(float(position["x"]), 1),
+                    round(float(position["y"]), 1),
+                    int(position.get("level") or 0),
+                ]
+            )
 
         if points:
             out[key] = points

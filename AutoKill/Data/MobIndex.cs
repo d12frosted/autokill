@@ -18,6 +18,17 @@ public sealed record MobEntry(
     IReadOnlyList<uint> Drops)
 {
     public bool Farmable => Areas.Count > 0;
+
+    /// <summary>
+    /// How hard it is everywhere it stands, or nothing when nobody recorded it.
+    /// </summary>
+    /// <remarks>
+    /// One name can cover creatures of very different levels: the same aldgoat
+    /// stands in a starting zone and in a much later one. So this is the whole
+    /// span, and each area says what its own patch of ground is.
+    /// </remarks>
+    public LevelRange? Level =>
+        LevelRange.Of(Areas.SelectMany(area => area.Spots).Select(spot => spot.Level));
 }
 
 /// <summary>
@@ -33,6 +44,10 @@ public sealed record MobEntry(
 /// coordinates. There is no height in them: what looks like a third dimension
 /// is the second one already converted. Callers drop the point onto the navmesh
 /// to find the ground.
+///
+/// Only the embedded half carries levels. A point from the other one has none,
+/// which is why a level of zero has to keep meaning "unrecorded" all the way
+/// through rather than being folded into the arithmetic.
 /// </remarks>
 public sealed class MobIndex
 {
@@ -89,15 +104,15 @@ public sealed class MobIndex
 
         // Spawn points only mean anything within one territory's projection, and
         // two territories can share coordinate values entirely.
-        var grouped = new Dictionary<(uint NameId, uint Territory), List<Vector3>>();
+        var grouped = new Dictionary<(uint NameId, uint Territory), List<(Vector3 World, ushort Level)>>();
         var baseIds = new Dictionary<uint, HashSet<uint>>();
 
-        void Record(uint nameId, uint territoryId, Vector3 world)
+        void Record(uint nameId, uint territoryId, Vector3 world, ushort level)
         {
             var key = (nameId, territoryId);
             if (!grouped.TryGetValue(key, out var points))
                 grouped[key] = points = [];
-            points.Add(world);
+            points.Add((world, level));
         }
 
         foreach (var spawn in spawns)
@@ -123,7 +138,9 @@ public sealed class MobIndex
                 new Vector3(
                     (float)MapCoordinates.ToWorld(spawn.Position.X, map.SizeFactor, map.OffsetX),
                     0f,
-                    (float)MapCoordinates.ToWorld(spawn.Position.Y, map.SizeFactor, map.OffsetY)));
+                    (float)MapCoordinates.ToWorld(spawn.Position.Y, map.SizeFactor, map.OffsetY)),
+                // This source has no levels at all.
+                0);
 
             if (spawn.BNpcBaseId != 0)
             {
@@ -156,7 +173,10 @@ public sealed class MobIndex
                     new Vector3(
                         (float)MapCoordinates.ToWorld(point[1], map.SizeFactor, map.OffsetX),
                         0f,
-                        (float)MapCoordinates.ToWorld(point[2], map.SizeFactor, map.OffsetY)));
+                        (float)MapCoordinates.ToWorld(point[2], map.SizeFactor, map.OffsetY)),
+                    // Fourth column since format 2. An older payload has three
+                    // and simply says nothing about how hard anything is.
+                    point.Length > 3 ? (ushort)point[3] : (ushort)0);
                 added++;
             }
         }
@@ -201,7 +221,7 @@ public sealed class MobIndex
             if (territory.Map.ValueNullable is { } m && territory.RowId != 0)
                 projections[territory.RowId] = new MapProjection(m.SizeFactor, m.OffsetX, m.OffsetY);
         }
-        foreach (var ((nameId, territoryId), points) in grouped)
+        foreach (var ((nameId, territoryId), seen) in grouped)
         {
             if (!territories.TryGetRow(territoryId, out var territory))
                 continue;
@@ -213,6 +233,7 @@ public sealed class MobIndex
                 locationsByMob[nameId] = locations = [];
 
             var map = territory.Map.ValueNullable;
+            var points = seen.Select(entry => entry.World).ToList();
 
             foreach (var spot in FarmSpots.Cluster(points, clusterRadius))
             {
@@ -225,7 +246,11 @@ public sealed class MobIndex
                         (float)MapCoordinates.ToMap(centre.Z, m.SizeFactor, m.OffsetY))
                     : Vector2.Zero;
 
-                locations.Add(new FarmLocation(territoryId, zone, centre, onMap, spot.Count, 0));
+                // The hardest of what stands here, since walking in means
+                // meeting whichever of them is worst.
+                locations.Add(new FarmLocation(
+                    territoryId, zone, centre, onMap, spot.Count,
+                    spot.Members.Max(i => seen[i].Level)));
             }
         }
 

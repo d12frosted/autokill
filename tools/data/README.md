@@ -13,6 +13,7 @@ either. Both have to come from community datasets.
 |---|---|---|
 | item drop tables | [Garland Tools](https://www.garlandtools.org) | composite mob id, low 10 digits are BNpcName |
 | observed spawn positions | [FFXIV Teamcraft](https://github.com/ffxiv-teamcraft/ffxiv-teamcraft) `monsters.json` | BNpcName |
+| mob levels | Teamcraft `monsters.json`, per position | BNpcName |
 | mob names | Teamcraft `mobs.json`, Garland | BNpcName |
 | map projection, territory, expansion | [xivapi/ffxiv-datamining](https://github.com/xivapi/ffxiv-datamining) CSVs and Teamcraft `maps.json` | Map / TerritoryType |
 
@@ -24,6 +25,11 @@ Teamcraft records positions as map coordinates. vnavmesh wants world
 coordinates, so they are converted with the Map sheet's size factor and offsets.
 Height is dropped rather than converted: map elevation is unreliable, and the
 plugin snaps points onto the navmesh floor anyway.
+
+Levels are kept per position, not per mob. One name covers creatures forty
+levels apart, and a fifth of the map groups in this data hold more than one
+level. Three percent of the points carry no level and 302 mobs carry none
+anywhere, so zero has to keep meaning "unrecorded" all the way through.
 
 ## Usage
 

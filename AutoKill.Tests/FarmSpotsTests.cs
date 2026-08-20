@@ -77,6 +77,18 @@ public class FarmSpotsTests
     }
 
     [Fact]
+    public void ASpotKeepsWhichPointsMadeIt()
+    {
+        // The caller usually knows something about each point that the geometry
+        // does not, such as the level it was recorded at, and folding points
+        // into a centre would throw that away.
+        var spots = FarmSpots.Cluster([At(0, 0), At(500, 0), At(505, 0)], 30f);
+
+        Assert.Equal([1, 2], spots[0].Members);
+        Assert.Equal([0], spots[1].Members);
+    }
+
+    [Fact]
     public void GroupingKeepsTheMembersOfEachGroup()
     {
         // Spots have to be grouped into areas without losing which spots went

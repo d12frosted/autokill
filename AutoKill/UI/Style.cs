@@ -1,4 +1,5 @@
 using System.Numerics;
+using AutoKill.Core;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 
@@ -128,6 +129,50 @@ internal static class Style
     public static void Place(string text) => ImGui.TextColored(Accent, text);
 
     /// <summary>
+    /// How hard something is, against the name it belongs to. Nothing is drawn
+    /// when nobody recorded a level, which is better than a row reading "Lv0".
+    /// </summary>
+    /// <remarks>
+    /// Counts go to the right edge because they are compared down the page. A
+    /// level is not read that way: it answers whether this is worth walking
+    /// into at all, which is a fact about the thing rather than about the row,
+    /// so it sits against the name and closer to it than ordinary spacing.
+    /// </remarks>
+    public static void Level(LevelRange? level)
+    {
+        if (level is null)
+            return;
+
+        ImGui.SameLine(0f, ImGui.GetStyle().ItemSpacing.X * 0.75f);
+        ImGui.TextColored(Muted, level.ToString());
+    }
+
+    /// <summary>
+    /// A full width row picked by the name on it, with the level beside the
+    /// name. Callers push their own id, since two mobs can share a name.
+    /// </summary>
+    /// <remarks>
+    /// The row is drawn first and the name over it, the same way Pick works, so
+    /// the whole width answers to the mouse and the level can still be a second
+    /// piece of text in its own colour rather than part of the label.
+    /// </remarks>
+    public static bool Named(string name, LevelRange? level, bool current = false)
+    {
+        var start = ImGui.GetCursorPos();
+
+        var picked = ImGui.Selectable("##named", current);
+        var after = ImGui.GetCursorPos();
+
+        ImGui.SetCursorPos(start);
+        ImGui.TextUnformatted(name);
+        Level(level);
+
+        ImGui.SetCursorPos(after);
+
+        return picked;
+    }
+
+    /// <summary>
     /// A full width row that can be picked, marked with what picking it does.
     /// </summary>
     /// <remarks>
@@ -143,7 +188,8 @@ internal static class Style
         string label,
         string? tip = null,
         FontAwesomeIcon mark = FontAwesomeIcon.Khanda,
-        bool current = false)
+        bool current = false,
+        LevelRange? level = null)
     {
         var start = ImGui.GetCursorPos();
 
@@ -159,6 +205,7 @@ internal static class Style
 
         ImGui.SameLine();
         ImGui.TextUnformatted(label);
+        Level(level);
 
         ImGui.SetCursorPos(after);
 

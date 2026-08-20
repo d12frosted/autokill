@@ -199,6 +199,7 @@ public sealed class MainWindow : Window
         }
 
         ImGui.TextUnformatted(target.Name);
+        Style.Level(mobs.Get(target.BNpcNameId)?.Level);
         Style.Trailing($"{target.Killed} / {target.Needed}");
 
         using var indent = ImRaii.PushIndent();
@@ -228,7 +229,8 @@ public sealed class MainWindow : Window
 
             if (Style.Pick(
                     $"({area.MapCentre.X:F1}, {area.MapCentre.Y:F1})",
-                    $"Go here for {target.Name}, {target.Remaining} still owed."))
+                    $"Go here for {target.Name}, {target.Remaining} still owed.",
+                    level: area.Level))
             {
                 PlanHunt(mobs, target, area);
             }
@@ -478,6 +480,7 @@ public sealed class MainWindow : Window
         var finished = session.Phase == FarmPhase.Finished;
 
         Style.Place(session.Target.Name);
+        Style.Level(session.Area.Level);
         ImGui.TextUnformatted(Where(session.Area));
         Style.Trailing(Density(session.Area));
 
@@ -563,6 +566,7 @@ public sealed class MainWindow : Window
         var area = target.Area;
 
         Style.Place(target.Name);
+        Style.Level(area.Level);
         ImGui.TextUnformatted(Where(area));
         Style.Trailing(Density(area));
 
@@ -808,9 +812,14 @@ public sealed class MainWindow : Window
 
         foreach (var mob in mobs.SearchMobs(mobQuery))
         {
+            using var id = ImRaii.PushId((int)mob.BNpcNameId);
+
             var open = selectedMob?.BNpcNameId == mob.BNpcNameId;
 
-            if (ImGui.Selectable($"{mob.Name}##{mob.BNpcNameId}", open))
+            // The whole span it is found at, since one name can cover a mob in
+            // a starting zone and the same mob forty levels later. Each place
+            // under it says which of those that ground is.
+            if (Style.Named(mob.Name, mob.Level, open))
                 selectedMob = open ? null : mob;
 
             Style.Trailing(mob.Farmable
@@ -924,9 +933,12 @@ public sealed class MainWindow : Window
 
             // The row says what picking it does, so it needs no button beside
             // it saying "choose" as well.
-            if (Style.Pick(field.Name, field.Shared
-                    ? $"Go here and kill all {field.Mobs.Count} of them."
-                    : "Go here and kill it."))
+            if (Style.Pick(
+                    field.Name,
+                    field.Shared
+                        ? $"Go here and kill all {field.Mobs.Count} of them."
+                        : "Go here and kill it.",
+                    level: area.Level))
             {
                 Plan(field);
             }
@@ -969,7 +981,8 @@ public sealed class MainWindow : Window
 
             Style.Explain(
                 $"{mob.Name} on its own: {own.SpawnCount} spawns "
-                + $"at ({own.MapCentre.X:F1}, {own.MapCentre.Y:F1})");
+                + $"at ({own.MapCentre.X:F1}, {own.MapCentre.Y:F1})"
+                + (own.Level is { } level ? $", {level}" : string.Empty));
         }
     }
 
@@ -1177,7 +1190,7 @@ public sealed class MainWindow : Window
         {
             using var id = ImRaii.PushId($"{mob.BNpcNameId}-{area.TerritoryTypeId}-{area.Centre.X:F0}");
 
-            if (Style.Pick(Where(area), $"Go here and kill {mob.Name}."))
+            if (Style.Pick(Where(area), $"Go here and kill {mob.Name}.", level: area.Level))
                 Plan(new FarmTarget(mob, area));
 
             Style.Trailing(Density(area));

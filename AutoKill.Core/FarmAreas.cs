@@ -2,6 +2,47 @@ using System.Numerics;
 
 namespace AutoKill.Core;
 
+/// <summary>
+/// How hard the things standing somewhere are, when anybody recorded it.
+/// </summary>
+/// <remarks>
+/// A range rather than a number because ground is not uniform: a fifth of the
+/// recorded places hold mobs of more than one level, and saying only the
+/// highest reads as harder ground than it is.
+///
+/// Zero means unrecorded, not level zero. Positions come from two sources and
+/// only one of them carries levels, so a spot with no level standing beside a
+/// spot with one is ordinary rather than odd, and counting the missing one
+/// would put every such area at "Lv0" and up.
+/// </remarks>
+public sealed record LevelRange(ushort Lowest, ushort Highest)
+{
+    /// <summary>
+    /// The range covering everything that was recorded, or nothing at all when
+    /// none of it was.
+    /// </summary>
+    public static LevelRange? Of(IEnumerable<ushort> levels)
+    {
+        ushort lowest = 0;
+        ushort highest = 0;
+
+        foreach (var level in levels)
+        {
+            if (level == 0)
+                continue;
+            if (lowest == 0 || level < lowest)
+                lowest = level;
+            if (level > highest)
+                highest = level;
+        }
+
+        return lowest == 0 ? null : new LevelRange(lowest, highest);
+    }
+
+    public override string ToString() =>
+        Lowest == Highest ? $"Lv{Lowest}" : $"Lv{Lowest}-{Highest}";
+}
+
 /// <summary>Somewhere a mob can be farmed, and how thickly it spawns there.</summary>
 /// <param name="Position">Where to path to, in world coordinates.</param>
 /// <param name="MapPosition">
@@ -34,6 +75,9 @@ public sealed record FarmArea(
     IReadOnlyList<FarmLocation> Spots)
 {
     public int SpawnCount => Spots.Sum(s => s.SpawnCount);
+
+    /// <summary>How hard everything in it is, or nothing when unrecorded.</summary>
+    public LevelRange? Level => LevelRange.Of(Spots.Select(s => s.Level));
 }
 
 /// <summary>One mob's spots, offered up to be merged with another's.</summary>

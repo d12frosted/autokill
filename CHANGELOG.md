@@ -37,6 +37,18 @@ reading the diff. Dates are when the tag went out.
   mark is not up, the run patrols its spawn points until it is, which is what
   hunting one looks like by hand.
 
+- **Levels, beside the names they belong to.** Every mob, field and place in the
+  window now says what level the things standing there are, so a target can be
+  ruled out before flying to it rather than after. Somewhere holding mobs of
+  more than one level says the span, which is a fifth of the recorded places.
+
+  A mob's row carries the whole span it is found at, since one name often covers
+  a creature in a starting zone and the same creature forty levels later. Each
+  place under it says which of those that ground actually is.
+
+  Levels come from the position data, so the 302 mobs whose positions came from
+  the other source have none. Those say nothing rather than reading "Lv0".
+
 ### Changed
 
 - **The window was reworked.** Every screen now puts names on the left and

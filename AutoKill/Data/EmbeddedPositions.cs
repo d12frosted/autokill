@@ -16,6 +16,8 @@ namespace AutoKill.Data;
 ///
 /// Positions are map coordinates keyed by BNpcName, deliberately unclustered:
 /// clustering belongs after the two sources are merged, not within either.
+/// Each row is [mapId, x, y, level], and a level of zero means nobody recorded
+/// one rather than the mob being level zero.
 /// </remarks>
 public static class EmbeddedPositions
 {

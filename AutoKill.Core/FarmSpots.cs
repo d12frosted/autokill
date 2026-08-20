@@ -2,8 +2,16 @@ using System.Numerics;
 
 namespace AutoKill.Core;
 
-/// <summary>A place to stand, and how many spawn points cluster around it.</summary>
-public sealed record FarmSpot(Vector3 Centre, int Count);
+/// <summary>A place to stand, and the spawn points that cluster around it.</summary>
+/// <param name="Members">
+/// Which of the points given to the clusterer ended up here, by position in the
+/// input. Kept because a caller usually knows something about each point that
+/// the geometry does not, such as what level it was recorded at.
+/// </param>
+public sealed record FarmSpot(Vector3 Centre, IReadOnlyList<int> Members)
+{
+    public int Count => Members.Count;
+}
 
 /// <summary>
 /// Groups scattered spawn points into places worth standing.
@@ -27,7 +35,7 @@ public static class FarmSpots
                     group.Average(i => points[i].X),
                     group.Average(i => points[i].Y),
                     group.Average(i => points[i].Z)),
-                group.Count))
+                group))
             .ToList();
 
     /// <summary>
