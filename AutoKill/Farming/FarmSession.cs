@@ -298,6 +298,17 @@ public sealed class FarmSession
 
     public int Kills => kills;
 
+    /// <summary>Whether dying is what ended it, for offering to pick it back up.</summary>
+    public bool Died { get; private set; }
+
+    /// <summary>
+    /// Where things stood when it ended, frozen. The live progress keeps
+    /// moving with the clock and the bags, and what is left to do should be
+    /// measured from the end of the run, not from however long the result has
+    /// been sitting on screen.
+    /// </summary>
+    public FarmProgress? Outcome { get; private set; }
+
     public FarmProgress Progress => new(
         kills,
         (pausedAt ?? DateTime.UtcNow) - startedAt - pausedFor,
@@ -621,6 +632,8 @@ public sealed class FarmSession
 
         Phase = FarmPhase.Finished;
         Status = reason;
+        Died = met.Any(c => c is DeathCondition);
+        Outcome = progress;
         recorder?.Write("finish", new { reason, kills, elapsed = progress.Elapsed.TotalSeconds });
         recorder?.Dispose();
         observations.Save();

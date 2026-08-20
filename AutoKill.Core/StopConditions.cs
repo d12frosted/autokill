@@ -107,6 +107,49 @@ public sealed class StopConditions(IReadOnlyList<IStopCondition> conditions, Sto
     public IReadOnlyList<IStopCondition> Met(FarmProgress progress) =>
         Conditions.Where(condition => condition.IsMet(progress)).ToList();
 
+    /// <summary>
+    /// The same ask, less what is already done, for picking a run back up.
+    /// </summary>
+    /// <remarks>
+    /// Kills, items and time all subtract what the finished run banked; a
+    /// target already met disappears rather than turning into an ask for zero.
+    /// A level target is where the character stands, not something this run
+    /// accumulated, so it rides along whole, and so do the safety conditions,
+    /// which carry no state at all.
+    /// </remarks>
+    public StopConditions Remaining(FarmProgress progress)
+    {
+        var rest = new List<IStopCondition>();
+
+        foreach (var condition in Conditions)
+        {
+            switch (condition)
+            {
+                case KillCountCondition kills:
+                    if (kills.Target > progress.Kills)
+                        rest.Add(new KillCountCondition(kills.Target - progress.Kills));
+                    break;
+
+                case ItemCountCondition item:
+                    if (item.Target > progress.CountOf(item.ItemId))
+                        rest.Add(new ItemCountCondition(
+                            item.ItemId, item.Target - progress.CountOf(item.ItemId)));
+                    break;
+
+                case ElapsedCondition time:
+                    if (time.Limit > progress.Elapsed)
+                        rest.Add(new ElapsedCondition(time.Limit - progress.Elapsed));
+                    break;
+
+                default:
+                    rest.Add(condition);
+                    break;
+            }
+        }
+
+        return new StopConditions(rest, Mode);
+    }
+
     public bool ShouldStop(FarmProgress progress)
     {
         // An empty set means "run until I say otherwise". Without this, an

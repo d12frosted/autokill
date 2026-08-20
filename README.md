@@ -54,7 +54,8 @@ refuse rather than change anything, or to go anyway.
 
 **Stop when you say.** Set any mix of a kill count, a time limit, and an amount of any
 item the mob drops, and choose whether the first target ends the run or all of them must
-be met. Dying or filling your bags always ends it.
+be met. Dying or filling your bags always ends it; after a death it offers to pick the
+run back up with what is left of the goals.
 
 **Step aside when you step in.** Touch the controls and the run pauses rather than
 fighting you for the character: movement it did not ask for, your own teleport, or a

@@ -63,6 +63,12 @@ reading the diff. Dates are when the tag went out.
   wrong is worse than none. Paused time never counts, so the rates are about
   the farming.
 
+- **Dying does not cost the setup.** A run ended by a death offers to pick
+  itself back up: same target, and only what is left of the goals, since kills
+  made, items held and time spent all survive the trip to the respawn point.
+  One click and it goes back to the field. Dying still always ends the run
+  first, so nothing walks a fresh corpse back without being asked.
+
 ### Changed
 
 - **Done lands somewhere useful.** Finishing a run picked off a crafting list

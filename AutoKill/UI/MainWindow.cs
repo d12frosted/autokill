@@ -600,6 +600,21 @@ public sealed class MainWindow : Window
 
         adjusting = false;
 
+        // Dying ends the run, but it should not cost the setup. What is left
+        // is the same ask less what the run banked: kills made, items held and
+        // time spent all stay made, held and spent.
+        if (session.Died && session.Outcome is { } outcome)
+        {
+            if (ImGui.Button("Pick it back up", new Vector2(160f, 0f))
+                && farming.Start(session.Target, session.Conditions.Remaining(outcome)))
+            {
+                resultDismissed = false;
+                return;
+            }
+
+            ImGui.SameLine();
+        }
+
         if (ImGui.Button("Done", new Vector2(120f, 0f)))
         {
             resultDismissed = true;
