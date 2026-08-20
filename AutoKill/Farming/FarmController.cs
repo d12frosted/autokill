@@ -137,6 +137,10 @@ public sealed class FarmController : IDisposable
 
     public void Resume() => Current?.Resume();
 
+    /// <summary>Flag an area on the game map and open it there.</summary>
+    public void ShowOnMap(FarmArea area) =>
+        PlayerActions.ShowOnMap(data, area.TerritoryTypeId, area.Centre);
+
     public void Dispose()
     {
         framework.Update -= OnUpdate;

@@ -82,8 +82,8 @@ one is a single click rather than setting it up again.
 `/autokill` opens the window. It shows one thing at a time:
 
 - **Browsing**: six tabs. By mob, By drop, Hunts, History, Learned and Settings.
-- **Planning**: the area you chose, and what should end the run. Nothing starts until
-  you press Start.
+- **Planning**: the area you chose, and what should end the run. A map button flags
+  the area on the game map. Nothing starts until you press Start.
 - **Running**: where it is, what it is doing, and how far along. Pause and Stop.
 - **Finished**: what happened, until you dismiss it. Or farm the same area again.
 

@@ -167,4 +167,27 @@ public static class PlayerActions
 
         agent->SetFlagMapMarker(territoryTypeId, mapId, position);
     }
+
+    /// <summary>
+    /// Put the flag somewhere and open the map on it. Coordinates in a row
+    /// answer "where is this" the way a table does; the map answers it the way
+    /// the game does.
+    /// </summary>
+    public static unsafe void ShowOnMap(IDataManager data, uint territoryTypeId, Vector3 position)
+    {
+        FlagDestination(data, territoryTypeId, position);
+
+        var agent = AgentMap.Instance();
+        if (agent == null)
+            return;
+
+        if (!data.GetExcelSheet<TerritoryType>().TryGetRow(territoryTypeId, out var territory))
+            return;
+
+        var mapId = territory.Map.RowId;
+        if (mapId == 0)
+            return;
+
+        agent->OpenMapByMapId(mapId, territoryTypeId);
+    }
 }

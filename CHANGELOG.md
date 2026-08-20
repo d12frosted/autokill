@@ -38,6 +38,11 @@ reading the diff. Dates are when the tag went out.
   A run you stop yourself never teleports: you are standing right there. The
   choice sticks as the default for the next run, and lives in Settings too.
 
+- **The plan can show itself on the map.** A "map" button beside the
+  coordinates flags the chosen area and opens the game map on it, so where you
+  are about to send yourself is a picture rather than a pair of numbers taken
+  on trust. The flag is the same one the run sets when it travels.
+
 ### Changed
 
 - **Done lands somewhere useful.** Finishing a run picked off a crafting list

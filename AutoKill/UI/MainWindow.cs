@@ -622,6 +622,14 @@ public sealed class MainWindow : Window
         Style.Place(target.Name);
         Style.Level(area.Level);
         ImGui.TextUnformatted(Where(area));
+
+        // Coordinates in a row are trusted blind; the map is how the game
+        // answers "where is this exactly", so offer it before Start is pressed.
+        ImGui.SameLine();
+        if (ImGui.SmallButton("map"))
+            farming.ShowOnMap(area);
+        Style.Explain("Flag it on the map and open the map there.");
+
         Style.Trailing(Density(area));
 
         Style.Gap(2f);
