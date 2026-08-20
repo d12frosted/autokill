@@ -43,6 +43,13 @@ reading the diff. Dates are when the tag went out.
   are about to send yourself is a picture rather than a pair of numbers taken
   on trust. The flag is the same one the run sets when it travels.
 
+- **The stop line can be moved mid-run.** "Actually fifty, not thirty" used to
+  cost a stop and a whole replan. The run screen now has "adjust targets": the
+  same controls as the plan, prefilled with what the run is aiming at, applied
+  without stopping. The target itself stays fixed; the stop line is yours to
+  move. A line moved behind where the run already stands ends it on the next
+  tick, which is what asking for less than you have means.
+
 ### Changed
 
 - **Done lands somewhere useful.** Finishing a run picked off a crafting list

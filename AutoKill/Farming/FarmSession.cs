@@ -126,7 +126,9 @@ public sealed class FarmSession
     // Every kind this run is here for, as a set, because "is this one of ours"
     // is asked of every object in the table several times a tick.
     private readonly HashSet<uint> nameIds;
-    private readonly StopConditions conditions;
+
+    // Not readonly: the stop line can be moved mid-run. The target never can.
+    private StopConditions conditions;
     private readonly NavmeshIpc navmesh;
     private readonly WrathIpc wrath;
     private readonly IClientState clientState;
@@ -359,6 +361,28 @@ public sealed class FarmSession
     }
 
     public void Finish(string reason) => Finish(reason, [], Progress);
+
+    /// <summary>
+    /// Move the stop line without stopping.
+    /// </summary>
+    /// <remarks>
+    /// "Actually fifty, not thirty" used to cost a stop and a whole replan.
+    /// The target stays immutable during a run; the stop line is the player's
+    /// to move, and it is checked afresh every tick anyway, so a line moved
+    /// behind where the run already stands simply ends it on the next one.
+    /// </remarks>
+    public void Retarget(StopConditions fresh)
+    {
+        if (Phase == FarmPhase.Finished)
+            return;
+
+        conditions = fresh;
+        recorder?.Write("retarget", new
+        {
+            targets = fresh.Conditions.Select(c => c.GetType().Name),
+            mode = fresh.Mode.ToString(),
+        });
+    }
 
     /// <summary>
     /// Let go of the character and wait to be told to carry on.

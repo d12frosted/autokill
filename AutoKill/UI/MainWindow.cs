@@ -53,6 +53,7 @@ public sealed class MainWindow : Window
     private int minuteTarget;
     private bool requireAll;
     private bool resultDismissed;
+    private bool adjusting;
 
     public MainWindow(
         Func<MobIndex?> index,
@@ -559,6 +560,12 @@ public sealed class MainWindow : Window
 
         if (!finished)
         {
+            if (adjusting)
+            {
+                DrawAdjust(mobs, session);
+                return;
+            }
+
             if (paused)
             {
                 if (ImGui.Button("Resume", new Vector2(120f, 0f)))
@@ -572,8 +579,19 @@ public sealed class MainWindow : Window
             ImGui.SameLine();
             if (ImGui.Button("Stop", new Vector2(120f, 0f)))
                 farming.Stop();
+
+            ImGui.SameLine();
+            if (ImGui.SmallButton("adjust targets"))
+            {
+                LoadTargets(session);
+                adjusting = true;
+            }
+
+            Style.Explain("Move the stop line without stopping the run.");
             return;
         }
+
+        adjusting = false;
 
         if (ImGui.Button("Done", new Vector2(120f, 0f)))
         {
@@ -615,6 +633,43 @@ public sealed class MainWindow : Window
             selectedItem = 0;
     }
 
+    /// <summary>
+    /// The stop line, editable mid-run. The same controls as the plan, because
+    /// they are the same question, prefilled with what the run is aiming at
+    /// now. Nothing changes until Apply: a run should never chase a target
+    /// somebody is halfway through typing.
+    /// </summary>
+    private void DrawAdjust(MobIndex mobs, FarmSession session)
+    {
+        DrawStopWhen(mobs, session.Target);
+
+        Style.Gap(2f);
+        if (ImGui.Button("Apply", new Vector2(120f, 0f)))
+        {
+            session.Retarget(BuildConditions());
+            adjusting = false;
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Cancel", new Vector2(120f, 0f)))
+            adjusting = false;
+    }
+
+    /// <summary>What the run is aiming at now, loaded into the editable fields.</summary>
+    private void LoadTargets(FarmSession session)
+    {
+        var current = session.Conditions;
+
+        killTarget = current.Conditions.OfType<KillCountCondition>().FirstOrDefault()?.Target ?? 0;
+        minuteTarget = (int)Math.Round(
+            current.Conditions.OfType<ElapsedCondition>().FirstOrDefault()?.Limit.TotalMinutes ?? 0);
+        requireAll = current.Mode == StopMode.All;
+
+        itemGoals.Clear();
+        foreach (var condition in current.Conditions.OfType<ItemCountCondition>())
+            itemGoals[condition.ItemId] = condition.Target;
+    }
+
     private void DrawPlan(MobIndex mobs, FarmTarget target)
     {
         var area = target.Area;
@@ -634,53 +689,7 @@ public sealed class MainWindow : Window
 
         Style.Gap(2f);
         ImGui.Separator();
-        Style.Heading("Stop when");
-
-        ImGui.SetNextItemWidth(120);
-        ImGui.InputInt("kills", ref killTarget);
-        ImGui.SameLine();
-        ImGui.SetNextItemWidth(120);
-        ImGui.InputInt("minutes", ref minuteTarget);
-
-        if (target.Drops.Count > 0)
-        {
-            Style.Heading(target.Shared ? "Collect, from any of them" : "Collect");
-            foreach (var itemId in target.Drops)
-            {
-                using var id = ImRaii.PushId((int)itemId);
-
-                DrawItemIcon(mobs, itemId);
-                var wanted = itemGoals.ContainsKey(itemId);
-                if (ImGui.Checkbox($"{mobs.ItemName(itemId)}##want", ref wanted))
-                {
-                    if (wanted)
-                        itemGoals[itemId] = 1;
-                    else
-                        itemGoals.Remove(itemId);
-                }
-
-                if (!wanted)
-                    continue;
-
-                ImGui.SameLine();
-                ImGui.SetNextItemWidth(100);
-                var quantity = itemGoals[itemId];
-                if (ImGui.InputInt("##quantity", ref quantity))
-                    itemGoals[itemId] = Math.Max(1, quantity);
-            }
-        }
-        else
-        {
-            Style.Muffled(target.Shared
-                ? "Nothing known drops from any of these."
-                : "Nothing known drops from this one.");
-        }
-
-        Style.Gap(2f);
-        if (killTarget > 0 || minuteTarget > 0 || itemGoals.Count > 0)
-            ImGui.Checkbox("meet every target, not just the first", ref requireAll);
-        else
-            Style.Muffled("no target set, so it will run until you stop it");
+        DrawStopWhen(mobs, target);
 
         // On the plan rather than only in Settings, because whether coming home
         // is wanted depends on the run: it sticks as the default for the next
@@ -728,6 +737,62 @@ public sealed class MainWindow : Window
         ImGui.SameLine();
         if (ImGui.Button("Back"))
             ClearPlan();
+    }
+
+    /// <summary>
+    /// The stop line: kills, minutes and items, and whether one or all of them
+    /// ends the run. Shared between the plan and adjusting mid-run, so the two
+    /// read as the same controls because they are.
+    /// </summary>
+    private void DrawStopWhen(MobIndex mobs, FarmTarget target)
+    {
+        Style.Heading("Stop when");
+
+        ImGui.SetNextItemWidth(120);
+        ImGui.InputInt("kills", ref killTarget);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(120);
+        ImGui.InputInt("minutes", ref minuteTarget);
+
+        if (target.Drops.Count > 0)
+        {
+            Style.Heading(target.Shared ? "Collect, from any of them" : "Collect");
+            foreach (var itemId in target.Drops)
+            {
+                using var id = ImRaii.PushId((int)itemId);
+
+                DrawItemIcon(mobs, itemId);
+                var wanted = itemGoals.ContainsKey(itemId);
+                if (ImGui.Checkbox($"{mobs.ItemName(itemId)}##want", ref wanted))
+                {
+                    if (wanted)
+                        itemGoals[itemId] = 1;
+                    else
+                        itemGoals.Remove(itemId);
+                }
+
+                if (!wanted)
+                    continue;
+
+                ImGui.SameLine();
+                ImGui.SetNextItemWidth(100);
+                var quantity = itemGoals[itemId];
+                if (ImGui.InputInt("##quantity", ref quantity))
+                    itemGoals[itemId] = Math.Max(1, quantity);
+            }
+        }
+        else
+        {
+            Style.Muffled(target.Shared
+                ? "Nothing known drops from any of these."
+                : "Nothing known drops from this one.");
+        }
+
+        Style.Gap(2f);
+        if (killTarget > 0 || minuteTarget > 0 || itemGoals.Count > 0)
+            ImGui.Checkbox("meet every target, not just the first", ref requireAll);
+        else
+            Style.Muffled("no target set, so it will run until you stop it");
     }
 
     private void DrawSettingsTab()
