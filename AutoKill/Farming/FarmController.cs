@@ -84,10 +84,12 @@ public sealed class FarmController : IDisposable
 
     public FarmSession? Current { get; private set; }
 
-    // Where the last run set off from, and the trip back there when one is
-    // wanted and going.
+    // Where the last run set off from, and the trip back when one is wanted
+    // and going. The destination is resolved once when the trip starts and
+    // held, not re-asked every tick.
     private uint homeTerritory;
     private Homecoming? homecoming;
+    private (uint Territory, uint Aetheryte) returnTo;
 
     // The stops still ahead of the current session, when a whole crafting list
     // is being farmed rather than one thing.
@@ -268,24 +270,47 @@ public sealed class FarmController : IDisposable
         session.Outcome is { } outcome
         && session.Conditions.Conditions.OfType<ItemCountCondition>().Any(c => c.IsMet(outcome));
 
+    /// <summary>
+    /// Where back is: an aetheryte in the zone the run set off from, or the
+    /// home point, as configured. Nothing when there is no way there.
+    /// </summary>
+    private (uint Territory, uint Aetheryte)? ReturnTo()
+    {
+        if (config.ReturnDestination == ReturnDestination.Home)
+        {
+            return Aetherytes.Home(data) is { } home
+                ? (home.TerritoryTypeId, home.AetheryteId)
+                : null;
+        }
+
+        return Aetherytes.AttunedIn(data, homeTerritory) is { } id
+            ? (homeTerritory, id)
+            : null;
+    }
+
     private void ConsiderHome()
     {
         if (!config.ReturnWhenDone || homecoming is not null)
             return;
 
-        // Already there, so there is no trip. Dying is excluded too: the game
-        // is about to offer its own way back, and racing it is not a favour.
-        if (clientState.TerritoryType == homeTerritory)
-            return;
+        // Dying is excluded: the game is about to offer its own way back, and
+        // racing it is not a favour.
         if (objects.LocalPlayer is null or { IsDead: true })
             return;
 
-        if (Aetherytes.AttunedIn(data, homeTerritory) is null)
+        if (ReturnTo() is not { } back)
         {
-            notifier.Info("no attuned aetheryte to teleport back to, staying put.");
+            notifier.Info(config.ReturnDestination == ReturnDestination.Home
+                ? "no home point set, staying put."
+                : "no attuned aetheryte to teleport back to, staying put.");
             return;
         }
 
+        // Already there, so there is no trip.
+        if (clientState.TerritoryType == back.Territory)
+            return;
+
+        returnTo = back;
         homecoming = new Homecoming(HomePatience, HomeRetry);
         notifier.Info("teleporting back once the dust settles.");
     }
@@ -295,7 +320,7 @@ public sealed class FarmController : IDisposable
         if (homecoming is not { } trip)
             return;
 
-        if (clientState.TerritoryType == homeTerritory)
+        if (clientState.TerritoryType == returnTo.Territory)
         {
             homecoming = null;
             return;
@@ -315,10 +340,7 @@ public sealed class FarmController : IDisposable
                 break;
 
             case HomeStep.Go:
-                if (Aetherytes.AttunedIn(data, homeTerritory) is { } id)
-                    Aetherytes.Teleport(id);
-                else
-                    homecoming = null;
+                Aetherytes.Teleport(returnTo.Aetheryte);
                 break;
         }
     }

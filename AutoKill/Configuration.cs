@@ -4,6 +4,16 @@ using Dalamud.Configuration;
 
 namespace AutoKill;
 
+/// <summary>Where a finished run should teleport back to.</summary>
+public enum ReturnDestination
+{
+    /// <summary>An aetheryte in the zone the run set off from.</summary>
+    Start,
+
+    /// <summary>The aetheryte set as the home point.</summary>
+    Home,
+}
+
 public sealed class Configuration : IPluginConfiguration
 {
     public int Version { get; set; } = 1;
@@ -75,6 +85,13 @@ public sealed class Configuration : IPluginConfiguration
     /// right there and can decide for themselves.
     /// </summary>
     public bool ReturnWhenDone { get; set; }
+
+    /// <summary>
+    /// Where back is: the zone the run set off from, or the home point.
+    /// Starting-zone by default, since that is where the interrupted business
+    /// usually was.
+    /// </summary>
+    public ReturnDestination ReturnDestination { get; set; } = ReturnDestination.Start;
 
     /// <summary>Keep the chocobo companion out while farming.</summary>
     public bool SummonCompanion { get; set; }

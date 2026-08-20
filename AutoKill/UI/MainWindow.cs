@@ -708,6 +708,23 @@ public sealed class MainWindow : Window
     }
 
     /// <summary>
+    /// Where back is, on the same line as the choice to go there at all. Only
+    /// two answers, so a combo rather than radio buttons taking a line each.
+    /// </summary>
+    private void DrawReturnTo()
+    {
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(160);
+
+        var choice = config.ReturnDestination == ReturnDestination.Home ? 1 : 0;
+        if (!ImGui.Combo("##return-to", ref choice, "to where I started\0to my home point\0"))
+            return;
+
+        config.ReturnDestination = choice == 1 ? ReturnDestination.Home : ReturnDestination.Start;
+        saveConfig();
+    }
+
+    /// <summary>
     /// The stop line, editable mid-run. The same controls as the plan, because
     /// they are the same question, prefilled with what the run is aiming at
     /// now. Nothing changes until Apply: a run should never chase a target
@@ -792,15 +809,17 @@ public sealed class MainWindow : Window
         // is wanted depends on the run: it sticks as the default for the next
         // one, which is what a preference asked at the right moment does.
         var back = config.ReturnWhenDone;
-        if (ImGui.Checkbox("teleport back here when it ends", ref back))
+        if (ImGui.Checkbox("teleport back when it ends", ref back))
         {
             config.ReturnWhenDone = back;
             saveConfig();
         }
 
         Style.Explain(
-            "Back to an aetheryte in this zone, once the run ends on its own. "
-            + "A run you stop yourself stays where it is.");
+            "Once the run ends on its own. A run you stop yourself stays where it is.");
+
+        if (config.ReturnWhenDone)
+            DrawReturnTo();
 
         ImGui.Separator();
         Style.Gap(2f);
@@ -1059,8 +1078,11 @@ public sealed class MainWindow : Window
             saveConfig();
         }
 
-        Style.Muffled("To an aetheryte in the zone the run set off from, once it ends");
-        Style.Muffled("on its own. A run you stop yourself stays where it is.");
+        if (config.ReturnWhenDone)
+            DrawReturnTo();
+
+        Style.Muffled("Once a run ends on its own. One you stop yourself stays where");
+        Style.Muffled("it is, and so does one that ends by dying.");
 
         Style.Gap(2f);
         var record = config.RecordRuns;

@@ -30,13 +30,14 @@ reading the diff. Dates are when the tag went out.
   make the run immediately try to teleport back to the field. Now it pauses and
   says why. Resume when you are done and it makes its own way back.
 
-- **It can bring you home.** Tick "teleport back here when it ends" on the plan
-  and a run that ends on its own teleports you back to an aetheryte in the zone
-  you set off from, the way Gatherbuddy Reborn does it. It waits out the combat
-  a last kill leaves trailing before casting, and if the way stays blocked for
-  half a minute it stays put rather than yanking you somewhere as a surprise.
-  A run you stop yourself never teleports: you are standing right there. The
-  choice sticks as the default for the next run, and lives in Settings too.
+- **It can bring you home.** Tick "teleport back when it ends" on the plan and
+  a run that ends on its own teleports you back, the way Gatherbuddy Reborn
+  does it: either to an aetheryte in the zone you set off from, or to your home
+  point, whichever you pick beside the checkbox. It waits out the combat a last
+  kill leaves trailing before casting, and if the way stays blocked for half a
+  minute it stays put rather than yanking you somewhere as a surprise. A run
+  you stop yourself never teleports: you are standing right there. The choice
+  sticks as the default for the next run, and lives in Settings too.
 
 - **The plan can show itself on the map.** A "map" button beside the
   coordinates flags the chosen area and opens the game map on it, so where you

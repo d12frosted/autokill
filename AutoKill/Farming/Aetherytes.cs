@@ -40,6 +40,26 @@ public static class Aetherytes
         return null;
     }
 
+    /// <summary>
+    /// The aetheryte set as the home point, and the territory it stands in.
+    /// Nothing when no home point is set, which a fresh character can manage.
+    /// </summary>
+    public static unsafe (uint AetheryteId, uint TerritoryTypeId)? Home(IDataManager data)
+    {
+        var player = PlayerState.Instance();
+        if (player == null)
+            return null;
+
+        var id = (uint)player->HomeAetheryteId;
+        if (id == 0)
+            return null;
+
+        if (!data.GetExcelSheet<Aetheryte>().TryGetRow(id, out var aetheryte))
+            return null;
+
+        return (id, aetheryte.Territory.RowId);
+    }
+
     public static unsafe bool Teleport(uint aetheryteId)
     {
         var telepo = Telepo.Instance();
