@@ -5,6 +5,13 @@ on:
     branches: [main]
   pull_request:
 
+# A push that supersedes a running build replaces it instead of queueing behind
+# it. Only on branches and PRs: every commit on main keeps its own verdict, so
+# a regression can be pinned to the commit that brought it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,6 +22,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+
+      # Keyed on the project files, since those are where dependencies are
+      # declared; there are no lock files to key on.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Build.props') }}
+          restore-keys: nuget-${{ runner.os }}-
 
       # Only the plugin project needs these; the core library and its tests are
       # deliberately free of them.
