@@ -457,15 +457,23 @@ public sealed class MainWindow : Window
             ImGui.TextUnformatted(what.Kills.ToString());
 
             ImGui.TableNextColumn();
-            if (what.TypicalRepopulation() is { } typical)
+            if (what.Typical() is { } typical)
             {
-                ImGui.TextUnformatted($"{typical.TotalSeconds:F0}s");
+                ImGui.TextUnformatted($"{typical.Typical.TotalSeconds:F0}s");
                 ImGui.SameLine();
-                Style.Muffled($"({what.Repopulated.Count} seen)");
+
+                // What the number is, not just how much of it there is. One is
+                // a respawn; the other is a respawn plus the trip back.
+                Style.Muffled(typical.Timed
+                    ? $"({typical.Samples} timed)"
+                    : $"({typical.Samples} with the trip back)");
             }
             else
             {
-                Style.Muffled($"not yet ({what.Repopulated.Count}/3)");
+                // Whichever kind is closest to standing on its own. Three of one
+                // is an estimate; two of each is still two of each.
+                var seen = Math.Max(what.Respawned.Count, what.Repopulated.Count);
+                Style.Muffled($"not yet ({seen}/{Repopulation.Enough})");
             }
 
             ImGui.TableNextColumn();

@@ -86,6 +86,11 @@ public sealed class FarmSession
     private static readonly TimeSpan DismountPatience = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan SampleInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan SightingInterval = TimeSpan.FromSeconds(5);
+
+    // How often the field is looked over for what died and what stood up. A
+    // second is finer than any respawn worth measuring and coarse enough that
+    // walking the object table costs nothing.
+    private static readonly TimeSpan FieldInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan StuckAfter = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan CompanionInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan RejectionInterval = TimeSpan.FromSeconds(2);
@@ -176,6 +181,13 @@ public sealed class FarmSession
     // only measures spots the circuit comes back to; this measures the one it
     // is on, which is the only measurement a single spot area can produce.
     private readonly SpotWatch watch = new();
+
+    // And the ground itself, spawn point by spawn point, which is the only one
+    // of the three that a field too busy to ever empty can produce. It watches
+    // as far as the hunt does, which is the range this run already takes the
+    // object table to be telling the truth over.
+    private readonly FieldWatch field = new(watching: HuntRadius);
+    private DateTime lastField = DateTime.MinValue;
     private int kills;
 
     public FarmSession(
@@ -288,6 +300,7 @@ public sealed class FarmSession
 
         RefreshGains();
         CountKills();
+        Observe(player);
         Record(player);
 
         var progress = Progress;
@@ -316,6 +329,59 @@ public sealed class FarmSession
     }
 
     public void Finish(string reason) => Finish(reason, [], Progress);
+
+    /// <summary>
+    /// Look over the field and keep what it teaches: which spawn points came
+    /// back and how long they took, and where things stand.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately outside the recorder, which only runs when a run is being
+    /// written to disk. What is learnt here changes how every future run
+    /// behaves, so it cannot be a side effect of debugging one.
+    /// </remarks>
+    private void Observe(IPlayerCharacter player)
+    {
+        // Somewhere else entirely, so nothing here is being watched and the
+        // gaps across the trip are not measurements of anything.
+        if (clientState.TerritoryType != area.TerritoryTypeId)
+        {
+            field.Left();
+            return;
+        }
+
+        if (DateTime.UtcNow - lastField < FieldInterval)
+            return;
+
+        lastField = DateTime.UtcNow;
+
+        var standing = objects
+            .OfType<IBattleNpc>()
+            .Where(npc => nameIds.Contains(npc.NameId) && !npc.IsDead && npc.CurrentHp > 0)
+            .Select(npc => new FieldMob(npc.GameObjectId, npc.NameId, npc.Position))
+            .ToList();
+
+        foreach (var back in field.Look(DateTime.UtcNow, player.Position, standing))
+        {
+            observations.RecordRespawn(back.NameId, area.TerritoryTypeId, back.Took);
+            recorder?.Write("repopulated", new
+            {
+                spot = spotIndex % Math.Max(1, area.Spots.Count),
+                seconds = Math.Round(back.Took.TotalSeconds, 1),
+                what = back.NameId,
+                how = "timed",
+            });
+        }
+
+        if (DateTime.UtcNow - lastSighting < SightingInterval)
+            return;
+
+        lastSighting = DateTime.UtcNow;
+        foreach (var npc in standing)
+        {
+            observations.RecordSighting(
+                npc.NameId, area.TerritoryTypeId, npc.Position.X, npc.Position.Z);
+        }
+    }
 
     /// <summary>
     /// A periodic snapshot, plus where every matching mob was standing. The
@@ -352,17 +418,6 @@ public sealed class FarmSession
         }
 
         lastPosition = player.Position;
-
-        if (DateTime.UtcNow - lastSighting >= SightingInterval)
-        {
-            lastSighting = DateTime.UtcNow;
-            foreach (var npc in objects.OfType<IBattleNpc>()
-                         .Where(n => nameIds.Contains(n.NameId) && !n.IsDead && n.CurrentHp > 0))
-            {
-                observations.RecordSighting(
-                    npc.NameId, area.TerritoryTypeId, npc.Position.X, npc.Position.Z);
-            }
-        }
 
         recorder?.Write("sample", new
         {
@@ -784,9 +839,9 @@ public sealed class FarmSession
         // is worth returning to whichever of them is standing there. Nothing
         // learnt yet leaves the usual guess.
         var expected = target.BNpcNameIds
-                           .Select(id => observations.Known(id, area.TerritoryTypeId)?.TypicalRepopulation())
+                           .Select(id => observations.Known(id, area.TerritoryTypeId)?.Typical())
                            .Where(typical => typical is not null)
-                           .Select(typical => typical!.Value)
+                           .Select(typical => typical!.Value.Typical)
                            .DefaultIfEmpty(TimeSpan.FromSeconds(90))
                            .Min();
 

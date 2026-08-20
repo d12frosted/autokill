@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AutoKill.Core;
 using Dalamud.Plugin.Services;
 
 namespace AutoKill.Data;
@@ -7,14 +8,26 @@ namespace AutoKill.Data;
 public sealed class MobObservations
 {
     /// <summary>
+    /// Seconds between one thing dying at a spawn point and the next standing
+    /// on it, watched from close enough to see both ends.
+    /// </summary>
+    /// <remarks>
+    /// The respawn itself, near enough: no travel in it and no waiting on a
+    /// circuit, so it is the number the rotation wants. It is also the only one
+    /// a busy field ever produces, since a field that is never empty and never
+    /// left gives the other two measurements nothing to work with.
+    /// </remarks>
+    public List<double> Respawned { get; set; } = [];
+
+    /// <summary>
     /// Seconds between emptying a spot and finding it populated again.
     /// </summary>
     /// <remarks>
     /// Not a respawn timer, and not pretending to be one. It is how long it took
     /// to find things standing there again, which includes however long it took
-    /// to come back, so it always reads a little long. That is the number worth
-    /// having anyway: the question a circuit asks is when it is worth returning,
-    /// not when the server ticked.
+    /// to come back, so it always reads a little long. That is still worth
+    /// having: the question a circuit asks is when it is worth returning, not
+    /// when the server ticked.
     /// </remarks>
     public List<double> Repopulated { get; set; } = [];
 
@@ -23,18 +36,8 @@ public sealed class MobObservations
 
     public int Kills { get; set; }
 
-    /// <summary>
-    /// The middle of what has been seen, ignoring the long tail of one-off
-    /// sightings: a single mob wandering does not move a farm spot.
-    /// </summary>
-    public TimeSpan? TypicalRepopulation()
-    {
-        if (Repopulated.Count < 3)
-            return null;
-
-        var sorted = Repopulated.Order().ToList();
-        return TimeSpan.FromSeconds(sorted[sorted.Count / 2]);
-    }
+    /// <summary>What to expect of this mob, and what says so.</summary>
+    public Repopulation? Typical() => Repopulation.From(Respawned, Repopulated);
 }
 
 /// <summary>
@@ -51,6 +54,11 @@ public sealed class MobObservations
 public sealed class Observations
 {
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = false };
+
+    // How many measurements of one kind are kept for one mob. Enough for the
+    // middle of them to mean something, few enough that a zone reworked in a
+    // patch is forgotten within an evening of farming it.
+    private const int Kept = 50;
 
     private readonly string path;
     private readonly IPluginLog log;
@@ -125,20 +133,27 @@ public sealed class Observations
         return entries[key] = new MobObservations();
     }
 
-    public void RecordRepopulation(uint bNpcNameId, uint territoryId, TimeSpan taken)
+    /// <summary>One spawn point timed from a death to what stood there next.</summary>
+    public void RecordRespawn(uint bNpcNameId, uint territoryId, TimeSpan taken) =>
+        Record(For(bNpcNameId, territoryId).Respawned, taken);
+
+    /// <summary>One spot found populated again on coming back to it.</summary>
+    public void RecordRepopulation(uint bNpcNameId, uint territoryId, TimeSpan taken) =>
+        Record(For(bNpcNameId, territoryId).Repopulated, taken);
+
+    private void Record(List<double> seconds, TimeSpan taken)
     {
         // A gap measured across a logout or a trip to another zone says nothing
         // about how fast anything respawns.
         if (taken <= TimeSpan.Zero || taken > TimeSpan.FromMinutes(10))
             return;
 
-        var mob = For(bNpcNameId, territoryId);
-        mob.Repopulated.Add(Math.Round(taken.TotalSeconds, 1));
+        seconds.Add(Math.Round(taken.TotalSeconds, 1));
 
         // Recent behaviour is the useful kind, and the file has no business
         // growing forever.
-        if (mob.Repopulated.Count > 50)
-            mob.Repopulated.RemoveRange(0, mob.Repopulated.Count - 50);
+        if (seconds.Count > Kept)
+            seconds.RemoveRange(0, seconds.Count - Kept);
 
         dirty = true;
     }

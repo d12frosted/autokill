@@ -163,14 +163,37 @@ reading the diff. Dates are when the tag went out.
 - **The places farmed hardest now learn something.** How long a spot takes to
   come back was only ever measured on the return trip: leave a spot, come back,
   see how long it had been. A mob with a single recorded spot never leaves, so
-  it never measured at all, and a field of thirty spots never came back inside
-  the ten minutes past which a gap is thrown away as untrustworthy. Hundreds of
-  kills in either could leave the Learned tab still saying "not yet".
+  it never measured at all, and a wide field never came back inside the ten
+  minutes past which a gap is thrown away as untrustworthy. Hundreds of kills
+  in either left the Learned tab still saying "not yet", and it said it as
+  "0/3", as though three were on the way.
 
-  A run now also watches the spot it is standing on: it cleared it, it went
-  quiet, something is standing there again. That number has no travel in it, so
-  it is closer to a respawn time than anything recorded before, and it turns up
-  exactly where nothing used to.
+  A run now watches two more things. The spot it is standing on: it cleared it,
+  it went quiet, something is standing there again. And, more useful in a busy
+  field, single spawn points: one thing went down here, and later something else
+  was standing here. That second one does not need the ground around it to be
+  quiet, which matters because a field worth farming is never quiet and never
+  left, so both of the older measurements sat there with nothing to close. It
+  now records one every time anything comes back, rather than once a circuit.
+
+  The timing runs from where a mob was first seen rather than from where it
+  fell. Pulling one walks it in to wherever you are standing, sometimes tens of
+  yalms from home, and the ground it dies on is nobody's spawn point.
+
+  Anything measured across a stretch where the field was not being watched is
+  thrown away instead of guessed at: something vanishing at a distance is a
+  draw distance rather than a death, a spawn point left behind comes back where
+  nobody is looking, and a loading screen can hide any amount of time.
+
+  The Learned tab now says which kind of number it is showing. A timed spawn
+  point is a respawn; a return trip is a respawn plus the trip, so it reads
+  long. The estimate prefers timings once it has three of them, and falls back
+  to return trips before falling back to a flat ninety seconds.
+
+- **Sightings were only recorded while a run was being written to a log.** They
+  sat behind the same check as the debug recorder, which is off unless you turn
+  it on, so a character that never recorded a run had never collected any. What
+  is learnt outlives the run, so it no longer depends on debugging one.
 
 - **Wrath keeps fighting after a job change.** Changing job ends Wrath's lease, and the
   plugin used to believe its own record of having started a rotation, so the rest of the

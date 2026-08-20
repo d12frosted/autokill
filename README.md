@@ -91,9 +91,12 @@ one is a single click rather than setting it up again.
 ### Learned
 
 What farming has taught it, per mob and zone: kills, and how quickly the place comes back.
-It says plainly when it has too few observations to trust rather than showing a number
-built from one or two. Entries can be forgotten one at a time or all at once, which is
-what you want after a zone is reworked in a patch.
+That last one is timed at single spawn points where it can be, which is a respawn, and
+across the trip back where it cannot, which reads longer because the trip is inside it.
+The tab says which of the two it is showing. It says plainly when it has too few
+observations to trust rather than showing a number built from one or two. Entries can be
+forgotten one at a time or all at once, which is what you want after a zone is reworked in
+a patch.
 
 ## What you need
 
