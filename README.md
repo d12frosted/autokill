@@ -75,7 +75,8 @@ measures it and uses it to decide when a spot is worth returning to. The second 
 the same ground routes better than the first.
 
 **Remember what you ran.** Finished runs are kept with what you asked for, so repeating
-one is a single click rather than setting it up again.
+one is a single click rather than setting it up again. Each shows kills and items per
+hour, so which field is better for something is answerable from your own runs.
 
 ## Using it
 

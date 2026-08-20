@@ -339,13 +339,20 @@ public sealed class MainWindow : Window
             using var indent = ImRaii.PushIndent();
 
             ImGui.TextUnformatted(mobs.ZoneName(run.TerritoryId));
-            Style.Trailing($"{run.Kills} killed in {elapsed:hh\\:mm\\:ss}");
+
+            // Rates as well as totals, because "which field is better" is a
+            // question about pace, and totals only answer it after arithmetic.
+            Style.Trailing(Pace.PerHour(run.Kills, elapsed) is { } pace
+                ? $"{run.Kills} killed in {elapsed:hh\\:mm\\:ss}   {pace:F0}/h"
+                : $"{run.Kills} killed in {elapsed:hh\\:mm\\:ss}");
             Style.Muffled(run.Reason);
 
             foreach (var (itemId, count) in run.Gained)
             {
                 DrawItemIcon(mobs, itemId);
                 Style.Muffled($"{count} {mobs.ItemName(itemId)}");
+                if (Pace.PerHour(count, elapsed) is { } perHour)
+                    Style.Trailing($"{perHour:F0}/h");
             }
 
             if (Repeatable(mobs, run) is not null)

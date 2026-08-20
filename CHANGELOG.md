@@ -56,6 +56,13 @@ reading the diff. Dates are when the tag went out.
   through `<se.16>` play, with a button to hear it before committing. Off by
   default.
 
+- **History says how fast, not just how much.** Each run now shows kills and
+  items per hour next to the totals, so "which field is better for this" is
+  answerable from your own runs instead of by feel. Runs under a minute show no
+  rate: one kill in twenty seconds reads as 180 an hour, and a number that
+  wrong is worse than none. Paused time never counts, so the rates are about
+  the farming.
+
 ### Changed
 
 - **Done lands somewhere useful.** Finishing a run picked off a crafting list
