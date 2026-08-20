@@ -15,4 +15,38 @@ public static class Pace
 
     public static double? PerHour(int count, TimeSpan elapsed) =>
         elapsed < Enough ? null : count / elapsed.TotalHours;
+
+    /// <summary>
+    /// How much longer the rest should take at the pace shown so far, nothing
+    /// when there is no pace to go on, and zero when there is no rest.
+    /// </summary>
+    public static TimeSpan? TimeToGo(int done, int target, TimeSpan elapsed)
+    {
+        if (done >= target)
+            return TimeSpan.Zero;
+
+        if (done <= 0 || elapsed < Enough)
+            return null;
+
+        return elapsed * (target - done) / done;
+    }
+
+    /// <summary>
+    /// A duration the way a person would say it: "14 min", "1 h 5 min". The
+    /// precision of hh:mm:ss promises more than an estimate knows.
+    /// </summary>
+    public static string Roughly(TimeSpan span)
+    {
+        // Judged before rounding: forty seconds is under a minute, not "1 min".
+        if (span < Enough)
+            return "under a minute";
+
+        var minutes = (int)Math.Round(span.TotalMinutes, MidpointRounding.AwayFromZero);
+        if (minutes < 60)
+            return $"{minutes} min";
+
+        return minutes % 60 == 0
+            ? $"{minutes / 60} h"
+            : $"{minutes / 60} h {minutes % 60} min";
+    }
 }

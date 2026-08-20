@@ -73,7 +73,9 @@ trailing, and a run you stop yourself stays put: you are standing right there.
 
 **Learn as it goes.** How quickly a place repopulates is not in any dataset, so AutoKill
 measures it and uses it to decide when a spot is worth returning to. The second run over
-the same ground routes better than the first.
+the same ground routes better than the first. A running goal says roughly how much
+longer it should take at the pace shown so far, and planning a field you have farmed
+before says what it gave last time.
 
 **Remember what you ran.** Finished runs are kept with what you asked for, so repeating
 one is a single click rather than setting it up again. Each shows kills and items per

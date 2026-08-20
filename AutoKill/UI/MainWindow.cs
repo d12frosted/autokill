@@ -373,6 +373,12 @@ public sealed class MainWindow : Window
         }
     }
 
+    /// <summary>The most recent finished run over this ground.</summary>
+    private RunRecord? LastRunHere(FarmTarget target) =>
+        history.Records.FirstOrDefault(run =>
+            run.TerritoryId == target.Area.TerritoryTypeId
+            && run.Mobs.Intersect(target.BNpcNameIds).Any());
+
     /// <summary>The ground this run covered, as the current data sees it.</summary>
     private static FarmTarget? Repeatable(MobIndex mobs, RunRecord run)
     {
@@ -524,7 +530,9 @@ public sealed class MainWindow : Window
         }
         else
         {
-            Style.Progress("kills", progress.Kills, kills.Target);
+            Style.Progress(
+                "kills", progress.Kills, kills.Target,
+                Reads(progress.Kills, kills.Target, progress.Elapsed));
         }
 
         if (time is null)
@@ -552,7 +560,8 @@ public sealed class MainWindow : Window
             DrawItemIcon(mobs, itemId);
             if (itemTargets.TryGetValue(itemId, out var target))
             {
-                Style.Progress(mobs.ItemName(itemId), have, target);
+                Style.Progress(
+                    mobs.ItemName(itemId), have, target, Reads(have, target, progress.Elapsed));
             }
             else
             {
@@ -677,6 +686,16 @@ public sealed class MainWindow : Window
             adjusting = false;
     }
 
+    /// <summary>
+    /// "12 / 30", with how much longer the rest should take at the pace shown
+    /// so far. Nothing extra when there is no pace to go on: a made-up number
+    /// would sit on the bar looking like a fact.
+    /// </summary>
+    private static string? Reads(int done, int target, TimeSpan elapsed) =>
+        Pace.TimeToGo(done, target, elapsed) is { } toGo && toGo > TimeSpan.Zero
+            ? $"{done} / {target}   ~{Pace.Roughly(toGo)}"
+            : null;
+
     /// <summary>What the run is aiming at now, loaded into the editable fields.</summary>
     private void LoadTargets(FarmSession session)
     {
@@ -708,6 +727,19 @@ public sealed class MainWindow : Window
         Style.Explain("Flag it on the map and open the map there.");
 
         Style.Trailing(Density(area));
+
+        // What this ground actually gave last time, which is the one honest
+        // basis for deciding whether it is worth going back.
+        if (LastRunHere(target) is { } last)
+        {
+            var took = TimeSpan.FromSeconds(last.ElapsedSeconds);
+            var what = string.Join(
+                ", ", last.Gained.Select(g => $"{g.Value} {mobs.ItemName(g.Key)}"));
+
+            Style.Muffled(what.Length > 0
+                ? $"Last time here: {last.Kills} kills and {what}, in {Pace.Roughly(took)}."
+                : $"Last time here: {last.Kills} kills in {Pace.Roughly(took)}.");
+        }
 
         Style.Gap(2f);
         ImGui.Separator();

@@ -69,6 +69,17 @@ reading the diff. Dates are when the tag went out.
   One click and it goes back to the field. Dying still always ends the run
   first, so nothing walks a fresh corpse back without being asked.
 
+- **The run says how much longer.** Progress bars with a target now carry a
+  rough time to go, worked from the pace this run has actually shown: "12 / 30
+  ~14 min". Said roughly on purpose, because hh:mm:ss promises more than an
+  estimate knows, and said only once there is a pace to go on: the first minute
+  shows no number rather than a silly one.
+
+- **The plan says what this ground gave last time.** Planning a field you have
+  farmed before shows the most recent run over it: kills, items and how long it
+  took. Which is the one honest basis for deciding whether it is worth going
+  back.
+
 ### Changed
 
 - **Done lands somewhere useful.** Finishing a run picked off a crafting list
