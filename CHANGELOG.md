@@ -3,6 +3,33 @@
 What changed in each release, written for people using the plugin rather than
 reading the diff. Dates are when the tag went out.
 
+## Unreleased
+
+### Added
+
+- **Pause.** A running farm can be paused and resumed from the window. Paused,
+  it lets go of everything: the route, the rotation, the target it was chasing.
+  The clock a time limit runs against stops with it, so a run paused for ten
+  minutes still farms for the minutes you asked for. Its eyes stay open, though:
+  kills it already started, items reaching your bags, and respawns it can still
+  vouch for all keep counting, so a pause does not put a hole in what it learns
+  or what it owes you. Item and kill goals still end the run even while paused,
+  because reached is reached.
+
+- **It pauses itself when you take the controls.** Walking the character away
+  mid-run used to mean fighting the plugin for your own character. Movement the
+  run did not ask for now pauses it, with a chat line saying so, and it waits
+  for you to press Resume. It watches ground covered rather than keys pressed,
+  so a gamepad counts and rebound keys do not confuse it. Combat is left alone:
+  knockbacks move a character with nobody driving, so repositioning mid-fight
+  is not read as a takeover. Grabbing the controls in a fight is what the Pause
+  button is for.
+
+- **It pauses instead of fighting a teleport or a duty.** Ending up in another
+  zone mid-run, whether a duty took you or you teleported yourself, used to
+  make the run immediately try to teleport back to the field. Now it pauses and
+  says why. Resume when you are done and it makes its own way back.
+
 ## 0.0.4 - 2026-08-20
 
 ### Added

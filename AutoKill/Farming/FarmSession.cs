@@ -2,6 +2,7 @@ using System.Numerics;
 using AutoKill.Core;
 using AutoKill.Data;
 using AutoKill.IPC;
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.ClientState.Objects.SubKinds;
@@ -17,6 +18,7 @@ public enum FarmPhase
     Teleporting,
     Travelling,
     Hunting,
+    Paused,
     Finished,
 }
 
@@ -62,6 +64,11 @@ public sealed class FarmSession
     // Inside the twenty five yalm cap every ranged attack shares, with room for
     // the target to shuffle without pulling the character in after it.
     private const float RangedRange = 20f;
+
+    // How far the character may stand from where the run left it before that
+    // reads as the player walking away. Wide enough for mount hover and the
+    // slide after a route stops; a moment of deliberate walking crosses it.
+    private const float PilotTolerance = 4f;
     private const float HuntRadius = 90f;
 
     // Anything of interest this far from the character is worth going to
@@ -136,6 +143,12 @@ public sealed class FarmSession
     private readonly IPluginLog log;
 
     private readonly DateTime startedAt = DateTime.UtcNow;
+
+    // Time spent paused, kept out of the elapsed clock. A run paused for ten
+    // minutes still owes the minutes it was asked for, and "killed in" should
+    // say how long the killing took rather than how long the window was open.
+    private TimeSpan pausedFor = TimeSpan.Zero;
+    private DateTime? pausedAt;
     private readonly Dictionary<uint, int> baselineCounts = [];
     private readonly Dictionary<uint, int> gained = [];
     private readonly HashSet<ulong> engaged = [];
@@ -154,6 +167,10 @@ public sealed class FarmSession
     // The same question asked of the journey rather than of the fight: is the
     // spot we set off for one we are ever going to reach.
     private readonly TravelWatch travelWatch = new(TravelPatience, SpotGiveUpCooldown);
+
+    // Whether the movement on screen is the run's own doing. The moment it is
+    // not, the player has the controls and the run must let go.
+    private readonly PilotWatch pilotWatch = new(PilotTolerance);
 
     private DateTime lastMove = DateTime.MinValue;
     private DateTime lastMountAction = DateTime.MinValue;
@@ -281,7 +298,7 @@ public sealed class FarmSession
 
     public FarmProgress Progress => new(
         kills,
-        DateTime.UtcNow - startedAt,
+        (pausedAt ?? DateTime.UtcNow) - startedAt - pausedFor,
         objects.LocalPlayer?.Level ?? 0,
         Bags.IsFull(),
         objects.LocalPlayer is { IsDead: true },
@@ -314,6 +331,19 @@ public sealed class FarmSession
             return;
         }
 
+        // Paused, but the eyes above stay open: kills the run started, items
+        // reaching the bags and whatever the field watch can still vouch for
+        // all keep counting, so a pause does not put a hole in anything.
+        if (Phase == FarmPhase.Paused)
+            return;
+
+        if (TakenOver(player) is { } why)
+        {
+            Pause(why);
+            notifier.Info($"paused: {why}. Resume it from the window.");
+            return;
+        }
+
         switch (Phase)
         {
             case FarmPhase.Teleporting:
@@ -329,6 +359,114 @@ public sealed class FarmSession
     }
 
     public void Finish(string reason) => Finish(reason, [], Progress);
+
+    /// <summary>
+    /// Let go of the character and wait to be told to carry on.
+    /// </summary>
+    /// <remarks>
+    /// Everything in hand is released: the route, the rotation lease, the
+    /// quarry. The paused tick keeps counting what it can still be sure of, but
+    /// the measurements that assume the run stood watching the whole time are
+    /// closed rather than left open across the gap: a cleared spot returned to
+    /// after a pause would otherwise file the pause as a respawn.
+    /// </remarks>
+    public void Pause(string reason)
+    {
+        if (Phase is FarmPhase.Paused or FarmPhase.Finished)
+            return;
+
+        recorder?.Write("pause", new { reason, phase = Phase.ToString() });
+        Phase = FarmPhase.Paused;
+        Status = reason;
+        pausedAt = DateTime.UtcNow;
+
+        navmesh.StopCompletely();
+        wrath.Stop();
+
+        chosen = 0;
+        approach = Closeness.AtRange;
+        dismountingSince = null;
+        landing = false;
+        emptySince = null;
+
+        watch.Left();
+        clearedAt.Clear();
+        pilotWatch.Reset();
+
+        log.Information($"Farming {target.Name} paused: {reason}");
+    }
+
+    /// <summary>
+    /// Carry on from wherever the character is now.
+    /// </summary>
+    /// <remarks>
+    /// Through the teleport phase rather than back to whatever was in hand,
+    /// because the pause may have taken the character anywhere. That phase
+    /// already answers every case: the wrong zone teleports, the right zone
+    /// travels, and a spot still underfoot is a short trip.
+    /// </remarks>
+    public void Resume()
+    {
+        if (Phase != FarmPhase.Paused)
+            return;
+
+        recorder?.Write("resume", new { });
+        if (pausedAt is { } since)
+            pausedFor += DateTime.UtcNow - since;
+        pausedAt = null;
+
+        pilotWatch.Reset();
+        Status = "resuming";
+        Phase = FarmPhase.Teleporting;
+        log.Information($"Farming {target.Name} resumed.");
+    }
+
+    /// <summary>
+    /// Whether somebody else has the character, said as the reason to pause.
+    /// </summary>
+    /// <remarks>
+    /// Three takeovers, all answered by waiting rather than by wrestling the
+    /// character back. Being in the wrong zone mid-run means a duty or the
+    /// player's own teleport took them there, since nothing the run does in
+    /// these phases leaves the zone; the old answer of teleporting straight
+    /// back is exactly the fight this exists to avoid. Otherwise, ground
+    /// covered that the run did not ask for is the player walking.
+    ///
+    /// Combat is excused rather than watched: knockbacks and draw-ins move a
+    /// character with nobody driving, and repositioning mid-fight is ordinary
+    /// play. Grabbing the controls in a fight is what the Pause button is for.
+    ///
+    /// A zone the run farms may itself set the duty flag (a field operation),
+    /// so being bound only counts as a takeover somewhere else.
+    /// </remarks>
+    private string? TakenOver(IPlayerCharacter player)
+    {
+        // Teleporting moves the character in ways nobody is steering, so only
+        // the settled phases are watched at all.
+        if (Phase is not (FarmPhase.Travelling or FarmPhase.Hunting))
+            return null;
+
+        if (clientState.TerritoryType != area.TerritoryTypeId)
+        {
+            pilotWatch.Reset();
+            return condition[ConditionFlag.BoundByDuty]
+                ? "a duty has you"
+                : "you teleported away";
+        }
+
+        var steered = navmesh.Moving || navmesh.PathfindInProgress;
+        var excused = condition[ConditionFlag.InCombat]
+            || condition[ConditionFlag.Casting]
+            || condition[ConditionFlag.BetweenAreas]
+            || condition[ConditionFlag.BetweenAreas51]
+            || condition[ConditionFlag.Jumping]
+            || PlayerActions.IsMounting(condition)
+            || player.IsDead;
+
+        return pilotWatch.Check(player.Position, steered, excused)
+            ? "you took the controls"
+            : null;
+    }
 
     /// <summary>
     /// Look over the field and keep what it teaches: which spawn points came
@@ -430,7 +568,7 @@ public sealed class FarmSession
             toSpot = spot is { } s ? Math.Round(Vector3.Distance(player.Position, s), 1) : (double?)null,
             mounted = PlayerActions.IsMounted(condition),
             flying = PlayerActions.IsFlying(condition),
-            inCombat = condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat],
+            inCombat = condition[ConditionFlag.InCombat],
             moving = navmesh.Moving,
             kills,
             targetId = targets.Target?.GameObjectId,
@@ -1512,6 +1650,11 @@ public sealed class FarmSession
     private void CountKills()
     {
         if (engaged.Count == 0)
+            return;
+
+        // Away from the field, everything engaged is out of the table without
+        // having died, and counting absence as a kill would score the trip.
+        if (clientState.TerritoryType != area.TerritoryTypeId)
             return;
 
         var dead = new List<ulong>();

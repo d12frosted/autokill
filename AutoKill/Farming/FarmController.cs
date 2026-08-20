@@ -117,6 +117,10 @@ public sealed class FarmController : IDisposable
         Current?.Finish(reason);
     }
 
+    public void Pause() => Current?.Pause("waiting on you");
+
+    public void Resume() => Current?.Resume();
+
     public void Dispose()
     {
         framework.Update -= OnUpdate;

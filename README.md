@@ -56,6 +56,12 @@ refuse rather than change anything, or to go anyway.
 item the mob drops, and choose whether the first target ends the run or all of them must
 be met. Dying or filling your bags always ends it.
 
+**Step aside when you step in.** Touch the controls and the run pauses rather than
+fighting you for the character: movement it did not ask for, your own teleport, or a
+duty taking you away all stop it, and it says so. It can also be paused from the window.
+Paused, it keeps counting what it can still see, and the clock a time limit runs
+against stops until you resume. Resume and it makes its own way back to the field.
+
 **Tell you it finished.** A chat line and a toast when the run ends, with the items as
 proper links you can hover. The chat line is local only, like `/echo`, and it is still
 there when you come back.
@@ -74,7 +80,7 @@ one is a single click rather than setting it up again.
 - **Browsing**: six tabs. By mob, By drop, Hunts, History, Learned and Settings.
 - **Planning**: the area you chose, and what should end the run. Nothing starts until
   you press Start.
-- **Running**: where it is, what it is doing, and how far along. One Stop button.
+- **Running**: where it is, what it is doing, and how far along. Pause and Stop.
 - **Finished**: what happened, until you dismiss it. Or farm the same area again.
 
 ### Settings

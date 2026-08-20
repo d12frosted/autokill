@@ -109,7 +109,9 @@ public sealed class MainWindow : Window
         {
             // The title carries the state too, since the window is often behind
             // something else while a run is going.
-            WindowName = $"AutoKill - {session.Target.Name}###AutoKillMain";
+            WindowName = session.Phase == FarmPhase.Paused
+                ? $"AutoKill - paused - {session.Target.Name}###AutoKillMain"
+                : $"AutoKill - {session.Target.Name}###AutoKillMain";
             DrawRun(mobs, session);
             return;
         }
@@ -486,6 +488,7 @@ public sealed class MainWindow : Window
     {
         var progress = session.Progress;
         var finished = session.Phase == FarmPhase.Finished;
+        var paused = session.Phase == FarmPhase.Paused;
 
         Style.Place(session.Target.Name);
         Style.Level(session.Area.Level);
@@ -493,8 +496,11 @@ public sealed class MainWindow : Window
         Style.Trailing(Density(session.Area));
 
         Style.Gap(2f);
+
+        // Paused is the one state the run wants somebody to notice, since it
+        // does not end on its own.
         ImGui.TextColored(
-            finished ? Style.Good : Style.Muted,
+            finished ? Style.Good : paused ? Style.Accent : Style.Muted,
             finished ? $"Finished: {session.Status}" : $"{session.Phase}: {session.Status}");
 
         Style.Gap();
@@ -553,6 +559,17 @@ public sealed class MainWindow : Window
 
         if (!finished)
         {
+            if (paused)
+            {
+                if (ImGui.Button("Resume", new Vector2(120f, 0f)))
+                    farming.Resume();
+            }
+            else if (ImGui.Button("Pause", new Vector2(120f, 0f)))
+            {
+                farming.Pause();
+            }
+
+            ImGui.SameLine();
             if (ImGui.Button("Stop", new Vector2(120f, 0f)))
                 farming.Stop();
             return;
