@@ -3,7 +3,9 @@ using AutoKill.Core;
 using AutoKill.Data;
 using AutoKill.Farming;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Windowing;
+using Dalamud.Plugin.Services;
 
 namespace AutoKill.UI;
 
@@ -13,9 +15,13 @@ namespace AutoKill.UI;
 /// <remarks>
 /// The main window is usually behind the game while a run is going, which is
 /// the one time anything in it is happening. This one holds the little that is
-/// watched rather than read: what is being farmed, how far along, and the two
+/// watched rather than read: what is being farmed, how far along, and the
 /// buttons worth pressing. It appears when a run starts and goes when the run
 /// ends; the result stays in the main window, which has the room to say more.
+///
+/// While it is up, the main window steps aside rather than repeating it. The
+/// cog is the way back to everything this window has no room for: the plan,
+/// the tabs, the settings.
 ///
 /// No title bar, because the name of the mob is the title, and dragging works
 /// from anywhere on it.
@@ -30,8 +36,15 @@ public sealed class RunOverlay : Window
     private readonly Func<MobIndex?> index;
     private readonly FarmController farming;
     private readonly Configuration config;
+    private readonly ITextureProvider textures;
+    private readonly Action openMain;
 
-    public RunOverlay(Func<MobIndex?> index, FarmController farming, Configuration config)
+    public RunOverlay(
+        Func<MobIndex?> index,
+        FarmController farming,
+        Configuration config,
+        ITextureProvider textures,
+        Action openMain)
         : base(
             "AutoKill###AutoKillOverlay",
             ImGuiWindowFlags.NoTitleBar
@@ -43,6 +56,8 @@ public sealed class RunOverlay : Window
         this.index = index;
         this.farming = farming;
         this.config = config;
+        this.textures = textures;
+        this.openMain = openMain;
 
         // Open for good; whether it draws is decided per frame below. The run
         // starting and ending is what shows and hides it, not a close box.
@@ -89,13 +104,21 @@ public sealed class RunOverlay : Window
         }
         else
         {
-            Style.Progress("kills", progress.Kills, kills.Target);
+            Style.Progress(
+                "kills", progress.Kills, kills.Target,
+                Estimate.Reads(progress.Kills, kills.Target, progress.Elapsed));
         }
 
         foreach (var wanted in session.Conditions.Conditions.OfType<ItemCountCondition>())
         {
+            var have = progress.CountOf(wanted.ItemId);
+
+            // The icon is how an item is recognised at a glance, which is the
+            // whole business of this window.
+            Icons.Draw(textures, index()?.ItemIcon(wanted.ItemId) ?? 0);
             Style.Progress(
-                ItemName(wanted.ItemId), progress.CountOf(wanted.ItemId), wanted.Target);
+                ItemName(wanted.ItemId), have, wanted.Target,
+                Estimate.Reads(have, wanted.Target, progress.Elapsed));
         }
 
         Style.Gap(2f);
@@ -112,6 +135,16 @@ public sealed class RunOverlay : Window
         ImGui.SameLine();
         if (ImGui.SmallButton("Stop"))
             farming.Stop();
+
+        ImGui.SameLine();
+        ImGui.PushFont(UiBuilder.IconFont);
+        var open = ImGui.SmallButton(FontAwesomeIcon.Cog.ToIconString());
+        ImGui.PopFont();
+
+        Style.Explain("Open the main window: the tabs, the plan and the settings.");
+
+        if (open)
+            openMain();
     }
 
     private string ItemName(uint itemId) => index()?.ItemName(itemId) ?? $"item {itemId}";

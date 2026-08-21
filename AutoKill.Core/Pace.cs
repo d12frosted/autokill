@@ -32,6 +32,13 @@ public static class Pace
     }
 
     /// <summary>
+    /// How long <paramref name="count"/> of something takes at a rate already
+    /// measured, for saying what a goal is likely to cost before it is set.
+    /// </summary>
+    public static TimeSpan? TimeFor(int count, double? perHour) =>
+        perHour is > 0 ? TimeSpan.FromHours(count / perHour.Value) : null;
+
+    /// <summary>
     /// A duration the way a person would say it: "14 min", "1 h 5 min". The
     /// precision of hh:mm:ss promises more than an estimate knows.
     /// </summary>

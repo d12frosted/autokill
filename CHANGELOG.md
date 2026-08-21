@@ -82,10 +82,13 @@ reading the diff. Dates are when the tag went out.
   back.
 
 - **A small progress window while it runs.** The main window is usually behind
-  the game exactly when a run is going, so the run now also shows in a compact
-  overlay: the mob, the status, the bars, Pause and Stop. It appears when a run
-  starts, goes away when it ends, and can be turned off in Settings. The result
-  still lands in the main window, which has the room to say more.
+  the game exactly when a run is going, so the run shows in a compact overlay
+  instead: the mob, the status, the bars with item icons and time to go, Pause
+  and Stop. The main window makes way for it as the run starts rather than
+  saying the same thing twice, and the cog on the overlay opens it again at the
+  tabs. When the run ends the overlay goes and the main window comes back with
+  the result, which is something to read rather than watch. Turn the overlay off
+  in Settings and the main window carries the run as before.
 
 - **Browse while it runs.** The main window used to be locked to the run for
   its whole length, but reading By drop during a twenty minute grind is how the
@@ -107,14 +110,25 @@ reading the diff. Dates are when the tag went out.
   than farmed for nothing. Materials with no recorded field are named and left
   behind rather than silently missing.
 
+- **What a goal is likely to cost, before you set it.** Planning a field you
+  have farmed before now says roughly how long the kills and items you just
+  asked for should take, pooled from every past run over that ground. So "is
+  this worth twenty minutes" is answerable while deciding rather than twenty
+  minutes later.
+
 ### Changed
+
+- **A run lets go of the fight it ends in.** Goals are usually met by loot from
+  the mob before the one currently swinging, and handing the rotation back at
+  that moment left the character standing in a fight doing nothing, which is a
+  good way to die to a mob you already beat. A finished run now keeps the
+  rotation until the fighting is over, then releases it. Travelling stops
+  immediately either way.
 
 - **Done lands somewhere useful.** Finishing a run picked off a crafting list
   used to drop you back on that material's field list, which is the one screen
-  you no longer need once the bags hold enough. Now, when the material is
-  gathered, Done lands on the list itself, counts fresh, with the next thing to
-  farm in view. A material still short keeps its fields on screen, since they
-  are still the business at hand.
+  the list never wants next. Done now lands on the list itself, counts fresh,
+  with the next thing to farm in view.
 
 ## 0.0.4 - 2026-08-20
 

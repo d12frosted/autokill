@@ -72,7 +72,8 @@ refuse rather than change anything, or to go anyway.
 **Stop when you say.** Set any mix of a kill count, a time limit, and an amount of any
 item the mob drops, and choose whether the first target ends the run or all of them must
 be met. Dying or filling your bags always ends it; after a death it offers to pick the
-run back up with what is left of the goals.
+run back up with what is left of the goals. However a run ends, it sees off the fight it
+was in before handing the rotation back, rather than dropping you mid-swing.
 
 **Step aside when you step in.** Touch the controls and the run pauses rather than
 fighting you for the character: movement it did not ask for, your own teleport, or a
@@ -84,7 +85,7 @@ against stops until you resume. Resume and it makes its own way back to the fiel
 measures it and uses it to decide when a spot is worth returning to. The second run over
 the same ground routes better than the first. A running goal says roughly how much
 longer it should take at the pace shown so far, and planning a field you have farmed
-before says what it gave last time.
+before says what it gave last time and what the goals you are setting should cost.
 
 ### Afterwards
 
@@ -108,10 +109,11 @@ hour, so which field is better for something is answerable from your own runs.
 - **Browsing**: six tabs. By mob, By drop, Hunts, History, Learned and Settings.
 - **Planning**: the area you chose, and what should end the run. A map button flags
   the area on the game map. Nothing starts until you press Start.
-- **Running**: where it is, what it is doing, and how far along. Pause and Stop, and
-  the stop targets can be adjusted without stopping. A compact overlay shows the same
-  at a glance beside the game, and the main window can go back to browsing while the
-  run keeps going.
+- **Running**: a compact overlay beside the game with the status, the bars and the
+  time to go, plus Pause, Stop and a cog back to the main window. The main window
+  makes way for it and comes back with the result, or carries the run itself if you
+  turn the overlay off. Stop targets can be adjusted without stopping, and the tabs
+  stay available while a run grinds.
 - **Finished**: what happened, until you dismiss it. Or farm the same area again.
 
 ### Settings

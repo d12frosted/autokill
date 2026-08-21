@@ -25,6 +25,11 @@ public sealed class FarmController : IDisposable
     // cancelled by the next ask.
     private static readonly TimeSpan HomeRetry = TimeSpan.FromSeconds(6);
 
+    // How long a finished run may keep the rotation while the fight it ended
+    // in plays out. Long enough to see off what is already swinging, short
+    // enough that a combat flag which never clears is not held forever.
+    private static readonly TimeSpan FightPatience = TimeSpan.FromSeconds(90);
+
     private readonly IFramework framework;
     private readonly NavmeshIpc navmesh;
     private readonly WrathIpc wrath;
@@ -217,10 +222,15 @@ public sealed class FarmController : IDisposable
     {
         framework.Update -= OnUpdate;
         Stop("plugin unloading");
+
+        // Nothing will tick to take it back afterwards, and a lease left
+        // behind by an unloading plugin is one nobody can release.
+        Current?.ReleaseRotation();
     }
 
     private void OnUpdate(IFramework _)
     {
+        TickRotation();
         TickHome();
 
         if (Current is not { Phase: not FarmPhase.Finished } session)
@@ -264,6 +274,29 @@ public sealed class FarmController : IDisposable
         }
 
         ConsiderHome();
+    }
+
+    /// <summary>
+    /// Take the rotation back from a run that ended mid-fight, once the
+    /// fighting is over.
+    /// </summary>
+    /// <remarks>
+    /// Checked every frame rather than arranged at the finish, because a run
+    /// stopped by the button finishes between ticks and would otherwise never
+    /// be noticed holding anything.
+    /// </remarks>
+    private void TickRotation()
+    {
+        if (Running || Current is not { HoldingRotation: true } done)
+            return;
+
+        var fighting = condition[ConditionFlag.InCombat]
+            && objects.LocalPlayer is { IsDead: false };
+
+        if (fighting && DateTime.UtcNow - done.FinishedAt < FightPatience)
+            return;
+
+        done.ReleaseRotation();
     }
 
     private static bool LegDone(FarmSession session) =>

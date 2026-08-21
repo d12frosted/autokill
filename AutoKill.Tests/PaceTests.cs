@@ -71,6 +71,20 @@ public class PaceTests
     }
 
     [Fact]
+    public void TimeForScalesAKnownRate()
+    {
+        // Sixty an hour, twenty wanted: twenty minutes.
+        Assert.Equal(TimeSpan.FromMinutes(20), Pace.TimeFor(20, 60d));
+    }
+
+    [Fact]
+    public void NoRateMeansNoEstimate()
+    {
+        Assert.Null(Pace.TimeFor(20, null));
+        Assert.Null(Pace.TimeFor(20, 0d));
+    }
+
+    [Fact]
     public void RoughlyRoundsRatherThanTruncates()
     {
         // 95 seconds is two minutes to anyone speaking, not one.

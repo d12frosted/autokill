@@ -60,6 +60,11 @@ public sealed class MainWindow : Window
     // out of reach.
     private bool browsingMeanwhile;
 
+    // The run this window knows about, and whether it has made way for the
+    // overlay carrying it.
+    private FarmSession? knownSession;
+    private bool steppedAside;
+
     public MainWindow(
         Func<MobIndex?> index,
         FarmController farming,
@@ -91,6 +96,54 @@ public sealed class MainWindow : Window
             MinimumSize = new Vector2(560, 420),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
         };
+    }
+
+    /// <summary>
+    /// Getting out of the way of the overlay, and coming back afterwards.
+    /// </summary>
+    /// <remarks>
+    /// Run every frame whether or not the window is open, which is the whole
+    /// point: a window that has stepped aside cannot decide for itself when to
+    /// come back.
+    ///
+    /// Two windows saying the same thing is one too many, so while the overlay
+    /// carries the run this one makes way, and the cog on the overlay brings it
+    /// back to the tabs rather than to a copy of what the overlay already
+    /// shows. It returns on its own when the run ends, because a result is
+    /// something to read rather than something to watch, and this is the window
+    /// with room for it.
+    /// </remarks>
+    public override void PreOpenCheck()
+    {
+        var session = farming.Current;
+
+        // A new run is a new result to show, whatever was dismissed before it.
+        if (!ReferenceEquals(knownSession, session))
+        {
+            knownSession = session;
+            resultDismissed = false;
+
+            // Only step aside if there is something to step aside from. A
+            // window that was already closed has made way for nothing, and
+            // bringing it back at the end of a run nobody was watching would
+            // be a surprise rather than a courtesy.
+            if (config.ShowOverlay && session is { Phase: not FarmPhase.Finished } && IsOpen)
+            {
+                steppedAside = true;
+                browsingMeanwhile = true;
+                IsOpen = false;
+            }
+        }
+
+        // Not cleared when one stop of a list hands over to the next: the
+        // window stepped aside for the list, so it is the end of the list that
+        // brings it back.
+        if (steppedAside && session is { Phase: FarmPhase.Finished })
+        {
+            steppedAside = false;
+            browsingMeanwhile = false;
+            IsOpen = true;
+        }
     }
 
     public override void Draw()
@@ -407,6 +460,52 @@ public sealed class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// What the goals just set are likely to cost, going by every past run
+    /// over this ground.
+    /// </summary>
+    /// <remarks>
+    /// Answered before Start rather than after it, because "is this worth
+    /// twenty minutes" is a question asked while deciding, and by then the
+    /// window already knows: it has the kills, the items and the minutes of
+    /// every run it has filed here. Runs are pooled rather than taking the
+    /// last one, since one unlucky trip is not a pace.
+    /// </remarks>
+    private void DrawLikelyCost(MobIndex mobs, FarmTarget target)
+    {
+        var here = history.Records
+            .Where(run => run.TerritoryId == target.Area.TerritoryTypeId
+                          && run.Mobs.Intersect(target.BNpcNameIds).Any())
+            .ToList();
+
+        if (here.Count == 0)
+            return;
+
+        var spent = TimeSpan.FromSeconds(here.Sum(run => run.ElapsedSeconds));
+        var said = false;
+
+        if (killTarget > 0
+            && Pace.TimeFor(killTarget, Pace.PerHour(here.Sum(run => run.Kills), spent)) is { } forKills)
+        {
+            Style.Muffled($"~{Pace.Roughly(forKills)} for {killTarget} kills, going by past runs here.");
+            said = true;
+        }
+
+        foreach (var (itemId, wanted) in itemGoals)
+        {
+            var got = here.Sum(run => run.Gained.GetValueOrDefault(itemId));
+            if (Pace.TimeFor(wanted, Pace.PerHour(got, spent)) is not { } forItem)
+                continue;
+
+            Style.Muffled(
+                $"~{Pace.Roughly(forItem)} for {wanted} {mobs.ItemName(itemId)}, going by past runs here.");
+            said = true;
+        }
+
+        if (said)
+            Style.Gap(2f);
+    }
+
     /// <summary>The most recent finished run over this ground.</summary>
     private RunRecord? LastRunHere(FarmTarget target) =>
         history.Records.FirstOrDefault(run =>
@@ -569,7 +668,7 @@ public sealed class MainWindow : Window
         {
             Style.Progress(
                 "kills", progress.Kills, kills.Target,
-                Reads(progress.Kills, kills.Target, progress.Elapsed));
+                Estimate.Reads(progress.Kills, kills.Target, progress.Elapsed));
         }
 
         if (time is null)
@@ -598,7 +697,7 @@ public sealed class MainWindow : Window
             if (itemTargets.TryGetValue(itemId, out var target))
             {
                 Style.Progress(
-                    mobs.ItemName(itemId), have, target, Reads(have, target, progress.Elapsed));
+                    mobs.ItemName(itemId), have, target, Estimate.Reads(have, target, progress.Elapsed));
             }
             else
             {
@@ -633,8 +732,11 @@ public sealed class MainWindow : Window
             if (ImGui.Button("Stop", new Vector2(120f, 0f)))
                 farming.Stop();
 
+            // All four on one row and all four the same height. A small button
+            // beside a full one reads as a different kind of thing, and these
+            // are four ways of steering the same run.
             ImGui.SameLine();
-            if (ImGui.SmallButton("adjust targets"))
+            if (ImGui.Button("Adjust targets"))
             {
                 LoadTargets(session);
                 adjusting = true;
@@ -643,7 +745,7 @@ public sealed class MainWindow : Window
             Style.Explain("Move the stop line without stopping the run.");
 
             ImGui.SameLine();
-            if (ImGui.SmallButton("browse"))
+            if (ImGui.Button("Browse"))
                 browsingMeanwhile = true;
 
             Style.Explain("Look something else up while this keeps going.");
@@ -685,25 +787,15 @@ public sealed class MainWindow : Window
     /// Land somewhere the finished run makes useful.
     /// </summary>
     /// <remarks>
-    /// A run picked off a crafting list ends back on that list when the bags now
-    /// hold enough of the material, with the counts fresh and the next thing to
-    /// farm in view. Landing on the material's own fields, which is where the
-    /// window would otherwise return, offers to farm the one thing that is done.
-    /// A material still short stays selected, since its fields are still the
-    /// business at hand. Judged by the bags rather than by what the run was
-    /// asked for, because the list is fed by what is held, not by what one run
-    /// set out to get.
+    /// A run picked off a crafting list ends back on that list, counts fresh
+    /// and the next thing to farm in view. The material's own field list, which
+    /// is where the window would otherwise return, is the one screen the list
+    /// never wants next: either the material is done, or the way to go back for
+    /// more is to pick it off the list again, which also picks up the amount.
     /// </remarks>
     private void StepBack()
     {
-        if (craftingList is null || selectedItem == 0)
-            return;
-
-        var material = craftingMaterials.FirstOrDefault(m => m.ItemId == selectedItem);
-        if (material is null)
-            return;
-
-        if (CraftingLists.StillNeeded(material.Required, Bags.CountOf(material.ItemId)) == 0)
+        if (craftingList is not null)
             selectedItem = 0;
     }
 
@@ -745,16 +837,6 @@ public sealed class MainWindow : Window
         if (ImGui.Button("Cancel", new Vector2(120f, 0f)))
             adjusting = false;
     }
-
-    /// <summary>
-    /// "12 / 30", with how much longer the rest should take at the pace shown
-    /// so far. Nothing extra when there is no pace to go on: a made-up number
-    /// would sit on the bar looking like a fact.
-    /// </summary>
-    private static string? Reads(int done, int target, TimeSpan elapsed) =>
-        Pace.TimeToGo(done, target, elapsed) is { } toGo && toGo > TimeSpan.Zero
-            ? $"{done} / {target}   ~{Pace.Roughly(toGo)}"
-            : null;
 
     /// <summary>What the run is aiming at now, loaded into the editable fields.</summary>
     private void LoadTargets(FarmSession session)
@@ -804,6 +886,7 @@ public sealed class MainWindow : Window
         Style.Gap(2f);
         ImGui.Separator();
         DrawStopWhen(mobs, target);
+        DrawLikelyCost(mobs, target);
 
         // On the plan rather than only in Settings, because whether coming home
         // is wanted depends on the run: it sticks as the default for the next
@@ -1096,25 +1179,9 @@ public sealed class MainWindow : Window
         Style.Muffled("recording where it went and what was standing nearby.");
     }
 
-    /// <summary>
-    /// Draw an item's icon inline, leaving the cursor where the text should go.
-    /// Falls through silently when there is no icon, since a missing picture is
-    /// not worth a gap in the row.
-    /// </summary>
     private void DrawItemIcon(MobIndex mobs, uint itemId) => DrawIcon(mobs.ItemIcon(itemId));
 
-    private void DrawIcon(ushort icon)
-    {
-        if (icon == 0)
-            return;
-
-        if (textures.GetFromGameIcon(new GameIconLookup(icon)).GetWrapOrDefault() is not { } texture)
-            return;
-
-        var size = ImGui.GetTextLineHeight() * 1.4f;
-        ImGui.Image(texture.Handle, new Vector2(size, size));
-        ImGui.SameLine();
-    }
+    private void DrawIcon(ushort icon) => Icons.Draw(textures, icon);
 
     private void Plan(FarmTarget target, bool carryItem = true)
     {

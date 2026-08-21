@@ -302,6 +302,21 @@ public sealed class FarmSession
     public bool Died { get; private set; }
 
     /// <summary>
+    /// Whether the run ended mid-fight and left the rotation running.
+    /// </summary>
+    /// <remarks>
+    /// A goal is often met by loot from the mob before the one currently
+    /// swinging, and letting go of the rotation then leaves the character
+    /// standing in a fight doing nothing, which is how a finished run gets
+    /// somebody killed. The rotation is kept until the fighting is over and
+    /// taken back by <see cref="ReleaseRotation"/>.
+    /// </remarks>
+    public bool HoldingRotation { get; private set; }
+
+    /// <summary>When it ended, so the hold above cannot last forever.</summary>
+    public DateTime FinishedAt { get; private set; }
+
+    /// <summary>
     /// Where things stood when it ended, frozen. The live progress keeps
     /// moving with the clock and the bags, and what is left to do should be
     /// measured from the end of the run, not from however long the result has
@@ -372,6 +387,23 @@ public sealed class FarmSession
     }
 
     public void Finish(string reason) => Finish(reason, [], Progress);
+
+    /// <summary>
+    /// Take the rotation back, once the fight a finish landed in the middle of
+    /// is over. Nothing to do when the finish was a quiet one.
+    /// </summary>
+    public void ReleaseRotation()
+    {
+        if (!HoldingRotation)
+            return;
+
+        HoldingRotation = false;
+        wrath.Stop();
+    }
+
+    /// <summary>Something is still swinging, and the character is alive to care.</summary>
+    private bool Fighting() =>
+        condition[ConditionFlag.InCombat] && objects.LocalPlayer is { IsDead: false };
 
     /// <summary>
     /// Move the stop line without stopping.
@@ -634,12 +666,29 @@ public sealed class FarmSession
         Status = reason;
         Died = met.Any(c => c is DeathCondition);
         Outcome = progress;
-        recorder?.Write("finish", new { reason, kills, elapsed = progress.Elapsed.TotalSeconds });
+
+        // Decided before the trace is written, so the trace says whether the
+        // run walked away from a fight or was handed one.
+        FinishedAt = DateTime.UtcNow;
+        HoldingRotation = Fighting();
+
+        recorder?.Write("finish", new
+        {
+            reason,
+            kills,
+            elapsed = progress.Elapsed.TotalSeconds,
+            heldRotation = HoldingRotation,
+        });
         recorder?.Dispose();
         observations.Save();
         Remember(reason, progress);
+
+        // Stop travelling either way, but keep swinging while something is
+        // still swinging back.
         navmesh.StopCompletely();
-        wrath.Stop();
+        if (!HoldingRotation)
+            wrath.Stop();
+
         log.Information($"Farming {target.Name} stopped: {reason}");
 
         Announce(reason, met, progress);
