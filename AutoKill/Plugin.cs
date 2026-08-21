@@ -70,11 +70,15 @@ public sealed class Plugin : IDalamudPlugin
             Framework, navmesh, wrath, ClientState, Objects, Targets, DataManager, Condition, notifier, requirements,
             jobs, itemId => index?.ItemName(itemId) ?? $"item {itemId}", config, NewRecorder, observations, history, Log);
 
+        // What past runs over a piece of ground came to, shared by the window
+        // that plans one and the overlay that watches one.
+        var past = new PastRuns(history);
+
         mainWindow = new MainWindow(
-            () => index, farming, Textures, config, observations, history, artisan, hunts, fates, Save);
+            () => index, farming, Textures, config, observations, history, artisan, hunts, fates, past, Save);
         windows.AddWindow(mainWindow);
         windows.AddWindow(new RunOverlay(
-            () => index, farming, config, Textures, () => mainWindow.IsOpen = true));
+            () => index, farming, config, Textures, past, () => mainWindow.IsOpen = true));
 
         PluginInterface.UiBuilder.Draw += windows.Draw;
         PluginInterface.UiBuilder.OpenMainUi += OpenMainUi;

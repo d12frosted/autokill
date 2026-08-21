@@ -215,6 +215,84 @@ internal static class Style
         return picked;
     }
 
+    /// <summary>
+    /// How wide a button that steers something is, at least. Longer labels
+    /// grow past it; nothing sits narrower, so a row of them lines up.
+    /// </summary>
+    private const float ActionWidth = 120f;
+
+    /// <summary>
+    /// A button that steers something: start, stop, apply, go back.
+    /// </summary>
+    /// <remarks>
+    /// Every one of them is the same height and no narrower than the next,
+    /// because a row of buttons doing comparable jobs should not look like one
+    /// important button and two afterthoughts. Drawn through here rather than
+    /// by hand so that stays true without anybody remembering it.
+    /// </remarks>
+    public static bool Action(string label, string? tip = null)
+    {
+        var pressed = ImGui.Button(label, new Vector2(Wide(label), 0f));
+        if (tip is not null)
+            Explain(tip);
+
+        return pressed;
+    }
+
+    /// <summary>
+    /// The one button on a screen worth pressing, coloured like it and sized
+    /// like its neighbours.
+    /// </summary>
+    public static bool Primary(string label)
+    {
+        ImGui.PushStyleColor(ImGuiCol.Button, Accent with { W = 0.85f });
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Accent);
+        ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.12f, 0.10f, 0.08f, 1f));
+        var pressed = ImGui.Button(label, new Vector2(Wide(label), 0f));
+        ImGui.PopStyleColor(3);
+
+        return pressed;
+    }
+
+    /// <summary>
+    /// An action with a picture instead of a word, square and the same height
+    /// as the words beside it.
+    /// </summary>
+    public static bool Action(FontAwesomeIcon icon, string? tip = null)
+    {
+        var side = ImGui.GetFrameHeight();
+
+        ImGui.PushFont(UiBuilder.IconFont);
+        var pressed = ImGui.Button(icon.ToIconString(), new Vector2(side, side));
+        ImGui.PopFont();
+
+        if (tip is not null)
+            Explain(tip);
+
+        return pressed;
+    }
+
+    /// <summary>
+    /// A button belonging to a row rather than to the screen: forget this
+    /// entry, repeat this run, look at this on the map.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately the small kind. These sit inside a line of text or a table
+    /// row, and drawn full height they would set the whole row's spacing and
+    /// turn a list into a stack of controls.
+    /// </remarks>
+    public static bool Row(string label, string? tip = null)
+    {
+        var pressed = ImGui.SmallButton(label);
+        if (tip is not null)
+            Explain(tip);
+
+        return pressed;
+    }
+
+    private static float Wide(string label) =>
+        Math.Max(ActionWidth, ImGui.CalcTextSize(label).X + (ImGui.GetStyle().FramePadding.X * 2f) + 8f);
+
     public static void Gap(float y = 6f) => ImGui.Dummy(new Vector2(0f, y));
 
     /// <summary>

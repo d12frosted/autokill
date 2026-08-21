@@ -37,6 +37,7 @@ public sealed class RunOverlay : Window
     private readonly FarmController farming;
     private readonly Configuration config;
     private readonly ITextureProvider textures;
+    private readonly PastRuns past;
     private readonly Action openMain;
 
     public RunOverlay(
@@ -44,6 +45,7 @@ public sealed class RunOverlay : Window
         FarmController farming,
         Configuration config,
         ITextureProvider textures,
+        PastRuns past,
         Action openMain)
         : base(
             "AutoKill###AutoKillOverlay",
@@ -57,6 +59,7 @@ public sealed class RunOverlay : Window
         this.farming = farming;
         this.config = config;
         this.textures = textures;
+        this.past = past;
         this.openMain = openMain;
 
         // Open for good; whether it draws is decided per frame below. The run
@@ -66,8 +69,8 @@ public sealed class RunOverlay : Window
 
         SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(260, 0),
-            MaximumSize = new Vector2(WrapAt + 20f, float.MaxValue),
+            MinimumSize = new Vector2(300, 0),
+            MaximumSize = new Vector2(WrapAt + 40f, float.MaxValue),
         };
     }
 
@@ -106,7 +109,9 @@ public sealed class RunOverlay : Window
         {
             Style.Progress(
                 "kills", progress.Kills, kills.Target,
-                Estimate.Reads(progress.Kills, kills.Target, progress.Elapsed));
+                Estimate.Reads(
+                    progress.Kills, kills.Target, progress.Elapsed,
+                    past.KillsPerHour(session.Target)));
         }
 
         foreach (var wanted in session.Conditions.Conditions.OfType<ItemCountCondition>())
@@ -118,32 +123,28 @@ public sealed class RunOverlay : Window
             Icons.Draw(textures, index()?.ItemIcon(wanted.ItemId) ?? 0);
             Style.Progress(
                 ItemName(wanted.ItemId), have, wanted.Target,
-                Estimate.Reads(have, wanted.Target, progress.Elapsed));
+                Estimate.Reads(
+                    have, wanted.Target, progress.Elapsed,
+                    past.PerHour(session.Target, wanted.ItemId)));
         }
 
         Style.Gap(2f);
         if (paused)
         {
-            if (ImGui.SmallButton("Resume"))
+            if (Style.Action("Resume"))
                 farming.Resume();
         }
-        else if (ImGui.SmallButton("Pause"))
+        else if (Style.Action("Pause"))
         {
             farming.Pause();
         }
 
         ImGui.SameLine();
-        if (ImGui.SmallButton("Stop"))
+        if (Style.Action("Stop"))
             farming.Stop();
 
         ImGui.SameLine();
-        ImGui.PushFont(UiBuilder.IconFont);
-        var open = ImGui.SmallButton(FontAwesomeIcon.Cog.ToIconString());
-        ImGui.PopFont();
-
-        Style.Explain("Open the main window: the tabs, the plan and the settings.");
-
-        if (open)
+        if (Style.Action(FontAwesomeIcon.Cog, "Open the main window: the tabs, the plan and the settings."))
             openMain();
     }
 

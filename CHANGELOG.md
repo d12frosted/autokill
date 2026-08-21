@@ -71,10 +71,13 @@ reading the diff. Dates are when the tag went out.
   first, so nothing walks a fresh corpse back without being asked.
 
 - **The run says how much longer.** Progress bars with a target now carry a
-  rough time to go, worked from the pace this run has actually shown: "12 / 30
-  ~14 min". Said roughly on purpose, because hh:mm:ss promises more than an
-  estimate knows, and said only once there is a pace to go on: the first minute
-  shows no number rather than a silly one.
+  rough time to go: "12 / 30   ~14 min". Said roughly on purpose, because
+  hh:mm:ss promises more than an estimate knows. It comes from the pace this
+  run has shown the moment there is one, since nothing knows a field today
+  better than the last few minutes on it, and from your past runs over the same
+  ground before that, so a bar is not blank for the first minute, which is
+  exactly when somebody is watching it. With neither, it says nothing rather
+  than making a number up.
 
 - **The plan says what this ground gave last time.** Planning a field you have
   farmed before shows the most recent run over it: kills, items and how long it
@@ -84,7 +87,8 @@ reading the diff. Dates are when the tag went out.
 - **A small progress window while it runs.** The main window is usually behind
   the game exactly when a run is going, so the run shows in a compact overlay
   instead: the mob, the status, the bars with item icons and time to go, Pause
-  and Stop. The main window makes way for it as the run starts rather than
+  and Stop, all sized like the buttons everywhere else. The main window makes
+  way for it as the run starts rather than
   saying the same thing twice, and the cog on the overlay opens it again at the
   tabs. When the run ends the overlay goes and the main window comes back with
   the result, which is something to read rather than watch. Turn the overlay off
