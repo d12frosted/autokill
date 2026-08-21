@@ -260,10 +260,17 @@ internal static class Style
     /// </summary>
     public static bool Action(FontAwesomeIcon icon, string? tip = null)
     {
-        var side = ImGui.GetFrameHeight();
+        var glyph = icon.ToIconString();
 
         ImGui.PushFont(UiBuilder.IconFont);
-        var pressed = ImGui.Button(icon.ToIconString(), new Vector2(side, side));
+
+        // Measured with the icon font in hand, since that is the font it will
+        // be drawn in: a picture is wider than the letter it replaces, and a
+        // square button sized from the text font clips it.
+        var wide = ImGui.CalcTextSize(glyph).X + (ImGui.GetStyle().FramePadding.X * 2f);
+        var pressed = ImGui.Button(
+            glyph, new Vector2(Math.Max(ImGui.GetFrameHeight(), wide), ImGui.GetFrameHeight()));
+
         ImGui.PopFont();
 
         if (tip is not null)
