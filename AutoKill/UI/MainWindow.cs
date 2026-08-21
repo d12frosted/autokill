@@ -481,7 +481,8 @@ public sealed class MainWindow : Window
 
         var said = false;
 
-        if (killTarget > 0 && Pace.TimeFor(killTarget, past.KillsPerHour(target)) is { } forKills)
+        if (killTarget > 0
+            && Pace.TimeToGo(0, killTarget, TimeSpan.Zero, past.KillsPace(target)) is { } forKills)
         {
             Style.Muffled($"~{Pace.Roughly(forKills)} for {killTarget} kills, going by past runs here.");
             said = true;
@@ -489,7 +490,7 @@ public sealed class MainWindow : Window
 
         foreach (var (itemId, wanted) in itemGoals)
         {
-            if (Pace.TimeFor(wanted, past.PerHour(target, itemId)) is not { } forItem)
+            if (Pace.TimeToGo(0, wanted, TimeSpan.Zero, past.PaceOf(target, itemId)) is not { } forItem)
                 continue;
 
             Style.Muffled(
@@ -665,7 +666,7 @@ public sealed class MainWindow : Window
                 "kills", progress.Kills, kills.Target,
                 Estimate.Reads(
                     progress.Kills, kills.Target, progress.Elapsed,
-                    past.KillsPerHour(session.Target)));
+                    past.KillsPace(session.Target)));
         }
 
         if (time is null)
@@ -695,7 +696,7 @@ public sealed class MainWindow : Window
             {
                 Style.Progress(
                     mobs.ItemName(itemId), have, target,
-                    Estimate.Reads(have, target, progress.Elapsed, past.PerHour(session.Target, itemId)));
+                    Estimate.Reads(have, target, progress.Elapsed, past.PaceOf(session.Target, itemId)));
             }
             else
             {

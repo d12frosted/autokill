@@ -70,18 +70,75 @@ public class PaceTests
         Assert.Equal("2 h", Pace.Roughly(TimeSpan.FromHours(2)));
     }
 
+    /// <summary>Sixty an hour, measured over plenty of past running.</summary>
+    private static readonly KnownPace Sixty = new(60d, TimeSpan.FromHours(2));
+
+    private static double Minutes(TimeSpan? span) => span!.Value.TotalMinutes;
+
     [Fact]
-    public void TimeForScalesAKnownRate()
+    public void AKnownPaceAnswersBeforeTheRunHasOne()
     {
-        // Sixty an hour, twenty wanted: twenty minutes.
-        Assert.Equal(TimeSpan.FromMinutes(20), Pace.TimeFor(20, 60d));
+        // Nothing done, no time passed, but this ground is known: ten at sixty
+        // an hour is ten minutes.
+        Assert.Equal(TimeSpan.FromMinutes(10), Pace.TimeToGo(0, 10, TimeSpan.Zero, Sixty));
     }
 
     [Fact]
-    public void NoRateMeansNoEstimate()
+    public void ASlowStartDoesNotRunAwayWithIt()
     {
-        Assert.Null(Pace.TimeFor(20, null));
-        Assert.Null(Pace.TimeFor(20, 0d));
+        // Two minutes in with nothing to show. Taken on its own that is a rate
+        // of zero and no estimate at all; taken against what this ground has
+        // always given, it is a couple of unlucky minutes.
+        Assert.InRange(Minutes(Pace.TimeToGo(0, 10, TimeSpan.FromMinutes(2), Sixty)), 10d, 13d);
+    }
+
+    [Fact]
+    public void AFastStartDoesNotRunAwayEither()
+    {
+        // Six in three minutes is a hundred and twenty an hour, which would
+        // promise the rest in two minutes. Three minutes is not enough running
+        // to believe that of a field known to give sixty.
+        var blended = Minutes(Pace.TimeToGo(6, 10, TimeSpan.FromMinutes(3), Sixty));
+        var alone = Minutes(Pace.TimeToGo(6, 10, TimeSpan.FromMinutes(3)));
+
+        Assert.InRange(blended, 3d, 5d);
+        Assert.True(blended > alone);
+    }
+
+    [Fact]
+    public void SustainedSlownessIsBelievedInTheEnd()
+    {
+        // Half an hour for two is not bad luck any more, and the estimate
+        // should have moved a long way from what the ground used to give.
+        Assert.InRange(Minutes(Pace.TimeToGo(2, 10, TimeSpan.FromMinutes(30), Sixty)), 18d, 26d);
+    }
+
+    [Fact]
+    public void ThinHistoryCountsForLittle()
+    {
+        // A pace measured over two minutes of farming is barely evidence, so
+        // the run in hand should outweigh it quickly. The same run against a
+        // well measured pace stays closer to it.
+        var thin = new KnownPace(60d, TimeSpan.FromMinutes(2));
+
+        var againstThin = Minutes(Pace.TimeToGo(1, 10, TimeSpan.FromMinutes(10), thin));
+        var againstSolid = Minutes(Pace.TimeToGo(1, 10, TimeSpan.FromMinutes(10), Sixty));
+
+        Assert.True(againstThin > againstSolid);
+    }
+
+    [Fact]
+    public void AKnownPaceOfNothingIsNoPace()
+    {
+        // This ground is known and known to drop none of it. That says nothing
+        // about how long the rest takes, so it falls back to the run in hand.
+        Assert.Null(Pace.TimeToGo(0, 10, TimeSpan.FromMinutes(2), new KnownPace(0d, TimeSpan.FromHours(1))));
+    }
+
+    [Fact]
+    public void AMetTargetIsStillDoneWithAKnownPace()
+    {
+        Assert.Equal(TimeSpan.Zero, Pace.TimeToGo(10, 10, TimeSpan.FromMinutes(5), Sixty));
     }
 
     [Fact]

@@ -111,7 +111,7 @@ public sealed class RunOverlay : Window
                 "kills", progress.Kills, kills.Target,
                 Estimate.Reads(
                     progress.Kills, kills.Target, progress.Elapsed,
-                    past.KillsPerHour(session.Target)));
+                    past.KillsPace(session.Target)));
         }
 
         foreach (var wanted in session.Conditions.Conditions.OfType<ItemCountCondition>())
@@ -125,7 +125,7 @@ public sealed class RunOverlay : Window
                 ItemName(wanted.ItemId), have, wanted.Target,
                 Estimate.Reads(
                     have, wanted.Target, progress.Elapsed,
-                    past.PerHour(session.Target, wanted.ItemId)));
+                    past.PaceOf(session.Target, wanted.ItemId)));
         }
 
         Style.Gap(2f);

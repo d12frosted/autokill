@@ -30,16 +30,20 @@ public sealed class PastRuns(RunHistory history)
         return spent > TimeSpan.Zero;
     }
 
-    public double? KillsPerHour(FarmTarget target)
+    /// <summary>How fast this ground has given up kills, and over how much farming.</summary>
+    public KnownPace? KillsPace(FarmTarget target)
     {
         Refresh(target);
-        return Pace.PerHour(kills, spent);
+        return Pace.PerHour(kills, spent) is { } perHour ? new KnownPace(perHour, spent) : null;
     }
 
-    public double? PerHour(FarmTarget target, uint itemId)
+    /// <summary>The same for one thing it drops.</summary>
+    public KnownPace? PaceOf(FarmTarget target, uint itemId)
     {
         Refresh(target);
-        return Pace.PerHour(gained.GetValueOrDefault(itemId), spent);
+        return Pace.PerHour(gained.GetValueOrDefault(itemId), spent) is { } perHour
+            ? new KnownPace(perHour, spent)
+            : null;
     }
 
     private void Refresh(FarmTarget target)

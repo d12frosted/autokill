@@ -72,12 +72,17 @@ reading the diff. Dates are when the tag went out.
 
 - **The run says how much longer.** Progress bars with a target now carry a
   rough time to go: "12 / 30   ~14 min". Said roughly on purpose, because
-  hh:mm:ss promises more than an estimate knows. It comes from the pace this
-  run has shown the moment there is one, since nothing knows a field today
-  better than the last few minutes on it, and from your past runs over the same
-  ground before that, so a bar is not blank for the first minute, which is
-  exactly when somebody is watching it. With neither, it says nothing rather
-  than making a number up.
+  hh:mm:ss promises more than an estimate knows.
+
+  What this ground has given before and what it is giving now are weighed
+  against each other rather than one replacing the other, so the number is
+  there from the first second and does not lurch about while the run is young.
+  A run two minutes old has a rate that doubles or halves on a single drop, and
+  an estimate that moves like that is not worth reading. A field that really is
+  poorer today is still believed once it has spent a while proving it, and a
+  pace measured over one short trip gives way faster than one measured over
+  hours. With no history and no pace of its own, a bar says nothing rather than
+  making a number up.
 
 - **The plan says what this ground gave last time.** Planning a field you have
   farmed before shows the most recent run over it: kills, items and how long it

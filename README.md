@@ -13,8 +13,8 @@ rotation plugin you already use. AutoKill decides where to go and what to attack
 lets those do what they are good at.
 
 <p align="center">
-  <img src="assets/screenshot-run.png" alt="A run in progress: killing Lesser Apollyon in Kozama'uka, 3 of 20 shells collected" width="640"><br>
-  <em>Twenty shells wanted, three in, and it says what it is doing about the rest.</em>
+  <img src="assets/screenshot-run.png" alt="A run in progress: killing Vawtsaral Br'aax in Yak T'el, six of ten hides collected" width="680"><br>
+  <em>Ten hides wanted, six in, and it says what it is doing about the rest.</em>
 </p>
 
 ## Automation risk
@@ -45,8 +45,8 @@ item on the list, it is a hide two steps under it. Or press one button and farm 
 whole list: one run per material, zone by zone, each going for what is still missing.
 
 <p align="center">
-  <img src="assets/screenshot-list.png" alt="A crafting list with every mob-dropped material gathered" width="640"><br>
-  <em>A crafting list read from Artisan. This one is finished; yours will say what is owed.</em>
+  <img src="assets/screenshot-list.png" alt="A crafting list from Artisan, showing six materials a mob can supply and a button to farm all of them" width="680"><br>
+  <em>Ninety five materials on the list, six of them something a mob carries.</em>
 </p>
 
 **Or work off a hunt bill.** The Hunts tab shows the bills you are carrying and what is
@@ -74,6 +74,11 @@ item the mob drops, and choose whether the first target ends the run or all of t
 be met. Dying or filling your bags always ends it; after a death it offers to pick the
 run back up with what is left of the goals. However a run ends, it sees off the fight it
 was in before handing the rotation back, rather than dropping you mid-swing.
+
+<p align="center">
+  <img src="assets/screenshot-plan.png" alt="The plan screen: stop conditions, what the ground gave last time, and where to teleport back to" width="680"><br>
+  <em>Nothing has started yet. What this ground gave last time is on the left of the decision.</em>
+</p>
 
 **Step aside when you step in.** Touch the controls and the run pauses rather than
 fighting you for the character: movement it did not ask for, your own teleport, or a
@@ -114,6 +119,11 @@ hour, so which field is better for something is answerable from your own runs.
   makes way for it and comes back with the result, or carries the run itself if you
   turn the overlay off. Stop targets can be adjusted without stopping, and the tabs
   stay available while a run grinds.
+
+<p align="center">
+  <img src="assets/screenshot-overlay.png" alt="The compact run overlay: target, status, kills, item progress with time to go, and Pause, Stop and cog buttons" width="460"><br>
+  <em>The overlay is all that stays on screen while a run goes.</em>
+</p>
 - **Finished**: what happened, until you dismiss it. Or farm the same area again.
 
 ### Settings

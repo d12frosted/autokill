@@ -12,20 +12,14 @@ internal static class Estimate
     /// "12 / 30", with how much longer the rest should take.
     /// </summary>
     /// <remarks>
-    /// The run's own pace is used the moment it has one, since nothing knows
-    /// this field today better than the last few minutes on it. Before that
-    /// there is a whole first minute with a bar and no answer, which is exactly
-    /// when somebody is watching, so past runs over the same ground fill the
-    /// gap. With neither, nothing is said: a made-up number would sit on the
-    /// bar looking like a fact.
+    /// What past runs over this ground gave and what this one is giving are
+    /// weighed against each other, so a bar has an answer from the first
+    /// second and that answer does not lurch about while the run is young.
+    /// With neither, nothing is said: a made-up number would sit on the bar
+    /// looking like a fact.
     /// </remarks>
-    public static string? Reads(int done, int target, TimeSpan elapsed, double? beforeThat = null)
-    {
-        var toGo = Pace.TimeToGo(done, target, elapsed)
-                   ?? Pace.TimeFor(target - done, beforeThat);
-
-        return toGo is { } left && left > TimeSpan.Zero
+    public static string? Reads(int done, int target, TimeSpan elapsed, KnownPace? known = null) =>
+        Pace.TimeToGo(done, target, elapsed, known) is { } left && left > TimeSpan.Zero
             ? $"{done} / {target}   ~{Pace.Roughly(left)}"
             : null;
-    }
 }
