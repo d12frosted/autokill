@@ -127,6 +127,15 @@ reading the diff. Dates are when the tag went out.
 
 ### Changed
 
+- **The window wears the family signature.** AutoKill now dresses like its
+  sibling Tataru: its own dark paper and chrome on every install, whatever theme
+  the rest of Dalamud wears, with a steel trim where Tataru wears bronze. Every
+  window opens with the masthead (the feather, the name, your character against
+  the right edge), buttons come in four deliberate tiers from a near-invisible
+  x up to the one accent-worded button that moves your character, and states
+  and everyday actions read as quiet lowercase fragments. The rules are written
+  down in docs/style.md.
+
 - **A run lets go of the fight it ends in.** Goals are usually met by loot from
   the mob before the one currently swinging, and handing the rotation back at
   that moment left the character standing in a fight doing nothing, which is a
