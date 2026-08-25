@@ -28,6 +28,7 @@ public sealed class MainWindow : Window
 {
     private readonly Func<MobIndex?> index;
     private readonly FarmController farming;
+    private readonly IPlayerState player;
     private readonly ITextureProvider textures;
     private readonly Configuration config;
     private readonly Observations observations;
@@ -66,9 +67,12 @@ public sealed class MainWindow : Window
     private FarmSession? knownSession;
     private bool steppedAside;
 
+    private IDisposable? shell;
+
     public MainWindow(
         Func<MobIndex?> index,
         FarmController farming,
+        IPlayerState player,
         ITextureProvider textures,
         Configuration config,
         Observations observations,
@@ -82,6 +86,7 @@ public sealed class MainWindow : Window
     {
         this.index = index;
         this.farming = farming;
+        this.player = player;
         this.textures = textures;
         this.config = config;
         this.observations = observations;
@@ -149,14 +154,28 @@ public sealed class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// The shell goes around the frame rather than inside it, so the title bar
+    /// and chrome are part of the signature too.
+    /// </summary>
+    public override void PreDraw() => shell = Style.Shell();
+
+    public override void PostDraw()
+    {
+        shell?.Dispose();
+        shell = null;
+    }
+
     public override void Draw()
     {
-        using var style = Style.Window();
+        // Whose window this is, and whose bags and gearsets every number below
+        // assumes. The masthead is the anchor every screen hangs from.
+        Style.Masthead("AutoKill", Whose());
 
         var mobs = index();
         if (mobs is null)
         {
-            Style.Muffled("Loading mob data...");
+            Style.Nothing("Nothing to show yet. The mob list is still being read.");
             return;
         }
 
@@ -202,6 +221,9 @@ public sealed class MainWindow : Window
         DrawBrowse(mobs);
     }
 
+    /// <summary>The character logged in, or empty air while nobody is.</summary>
+    private string Whose() => player.CharacterName is { Length: > 0 } name ? name : string.Empty;
+
     /// <summary>
     /// One line about the run this window has stepped away from, and the way
     /// back to it.
@@ -211,7 +233,7 @@ public sealed class MainWindow : Window
         Style.Place(session.Target.Name);
 
         ImGui.SameLine();
-        if (Style.Row("back to the run"))
+        if (Style.Quiet("back to the run"))
             browsingMeanwhile = false;
 
         Style.Trailing($"{session.Progress.Kills} killed   {session.Progress.Elapsed:hh\\:mm\\:ss}");
@@ -250,9 +272,7 @@ public sealed class MainWindow : Window
         var bills = hunts.Obtained();
         if (bills.Count == 0)
         {
-            Style.Gap();
-            Style.Muffled("No hunt bills in hand.");
-            Style.Muffled("Pick some up from a hunt board and they turn up here.");
+            Style.Nothing("No hunt bills in hand. Pick some up from a hunt board and they turn up here.");
             return;
         }
 
@@ -262,7 +282,7 @@ public sealed class MainWindow : Window
 
         foreach (var bill in bills)
         {
-            Style.Place(bill.Name);
+            Style.Line(bill.Name);
             if (bill.Elite)
                 Style.Trailing("one mark, killed once");
 
@@ -402,13 +422,12 @@ public sealed class MainWindow : Window
 
         if (history.Records.Count == 0)
         {
-            Style.Gap();
-            Style.Muffled("No runs yet.");
+            Style.Nothing("No runs yet. The runs you finish are filed here.");
             return;
         }
 
         ImGui.Spacing();
-        if (Style.Action("Clear history"))
+        if (Style.Row("clear history", "Forget every run filed here."))
             history.ForgetEverything();
 
         ImGui.Separator();
@@ -423,12 +442,12 @@ public sealed class MainWindow : Window
 
             var elapsed = TimeSpan.FromSeconds(run.ElapsedSeconds);
 
-            Style.Place(run.Named);
+            Style.Line(run.Named);
             Style.Trailing($"{run.When:d MMM HH:mm}");
 
             using var indent = ImRaii.PushIndent();
 
-            ImGui.TextUnformatted(mobs.ZoneName(run.TerritoryId));
+            Style.Line(mobs.ZoneName(run.TerritoryId));
 
             // Rates as well as totals, because "which field is better" is a
             // question about pace, and totals only answer it after arithmetic.
@@ -447,7 +466,7 @@ public sealed class MainWindow : Window
 
             if (Repeatable(mobs, run) is not null)
             {
-                if (Style.Row("repeat"))
+                if (Style.Quiet("repeat", "Plan this ground again, with the same goals."))
                     Repeat(mobs, run);
             }
             else
@@ -455,8 +474,7 @@ public sealed class MainWindow : Window
                 Style.Muffled("that ground is no longer in the data");
             }
 
-            ImGui.SameLine();
-            if (Style.Row("forget"))
+            if (Style.TrailingRemove("Forget this run."))
                 history.Forget(run);
 
             Style.Gap(2f);
@@ -559,13 +577,12 @@ public sealed class MainWindow : Window
         var entries = observations.Entries.ToList();
         if (entries.Count == 0)
         {
-            Style.Gap();
-            Style.Muffled("Nothing learnt yet. Farm something and this fills in.");
+            Style.Nothing("Nothing learnt yet. Farm something and this fills in.");
             return;
         }
 
         ImGui.Spacing();
-        if (Style.Action("Forget everything"))
+        if (Style.Row("forget everything", "Throw away everything farming has taught the plugin."))
             observations.ForgetEverything();
 
         ImGui.SameLine();
@@ -593,18 +610,18 @@ public sealed class MainWindow : Window
             using var id = ImRaii.PushId($"{mobId}-{territoryId}");
 
             ImGui.TableNextColumn();
-            ImGui.TextColored(Style.Accent, mobs.Get(mobId)?.Name ?? $"mob {mobId}");
+            Style.Line(mobs.Get(mobId)?.Name ?? $"mob {mobId}");
 
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(mobs.ZoneName(territoryId));
+            Style.Line(mobs.ZoneName(territoryId));
 
             ImGui.TableNextColumn();
-            ImGui.TextUnformatted(what.Kills.ToString());
+            Style.Line(what.Kills.ToString());
 
             ImGui.TableNextColumn();
             if (what.Typical() is { } typical)
             {
-                ImGui.TextUnformatted($"{typical.Typical.TotalSeconds:F0}s");
+                Style.Line($"{typical.Typical.TotalSeconds:F0}s");
                 ImGui.SameLine();
 
                 // What the number is, not just how much of it there is. One is
@@ -633,9 +650,9 @@ public sealed class MainWindow : Window
         var finished = session.Phase == FarmPhase.Finished;
         var paused = session.Phase == FarmPhase.Paused;
 
-        Style.Place(session.Target.Name);
+        Style.Line(session.Target.Name);
         Style.Level(session.Area.Level);
-        ImGui.TextUnformatted(Where(session.Area));
+        Style.Muffled(Where(session.Area));
         Style.Trailing(Density(session.Area));
 
         Style.Gap(2f);
@@ -644,20 +661,22 @@ public sealed class MainWindow : Window
         // does not end on its own.
         ImGui.TextColored(
             finished ? Style.Good : paused ? Style.Accent : Style.Muted,
-            finished ? $"Finished: {session.Status}" : $"{session.Phase}: {session.Status}");
+            finished
+                ? $"finished: {session.Status}"
+                : $"{session.Phase.ToString().ToLowerInvariant()}: {session.Status}");
 
         if (!finished && farming.Queued > 0)
             Style.Muffled($"then {farming.Queued} more stop(s) for the list");
 
         Style.Gap();
-        Style.Heading("Progress");
+        Style.Heading("progress");
 
         var kills = session.Conditions.Conditions.OfType<KillCountCondition>().FirstOrDefault();
         var time = session.Conditions.Conditions.OfType<ElapsedCondition>().FirstOrDefault();
 
         if (kills is null)
         {
-            ImGui.TextUnformatted("kills");
+            Style.Line("kills");
             Style.Trailing(progress.Kills.ToString());
         }
         else
@@ -671,7 +690,7 @@ public sealed class MainWindow : Window
 
         if (time is null)
         {
-            ImGui.TextUnformatted("elapsed");
+            Style.Line("elapsed");
             Style.Trailing($"{progress.Elapsed:hh\\:mm\\:ss}");
         }
         else
@@ -700,7 +719,7 @@ public sealed class MainWindow : Window
             }
             else
             {
-                ImGui.TextUnformatted(mobs.ItemName(itemId));
+                Style.Line(mobs.ItemName(itemId));
                 Style.Trailing($"{have}");
             }
         }
@@ -717,32 +736,31 @@ public sealed class MainWindow : Window
                 return;
             }
 
+            // The machinery movers are real buttons; the two ways of merely
+            // looking elsewhere read as text until the mouse finds them.
             if (paused)
             {
-                if (Style.Action("Resume"))
+                if (Style.Row("resume"))
                     farming.Resume();
             }
-            else if (Style.Action("Pause"))
+            else if (Style.Row("pause"))
             {
                 farming.Pause();
             }
 
             ImGui.SameLine();
-            if (Style.Action("Stop"))
+            if (Style.Row("stop"))
                 farming.Stop();
 
-            // All four on one row and all four the same height. A small button
-            // beside a full one reads as a different kind of thing, and these
-            // are four ways of steering the same run.
             ImGui.SameLine();
-            if (Style.Action("Adjust targets", "Move the stop line without stopping the run."))
+            if (Style.Quiet("adjust targets", "Move the stop line without stopping the run."))
             {
                 LoadTargets(session);
                 adjusting = true;
             }
 
             ImGui.SameLine();
-            if (Style.Action("Browse", "Look something else up while this keeps going."))
+            if (Style.Quiet("browse", "Look something else up while this keeps going."))
                 browsingMeanwhile = true;
             return;
         }
@@ -754,7 +772,7 @@ public sealed class MainWindow : Window
         // time spent all stay made, held and spent.
         if (session.Died && session.Outcome is { } outcome)
         {
-            if (Style.Action("Pick it back up")
+            if (Style.Row("pick it back up", "Start again, going for what the run still owed.")
                 && farming.Start(session.Target, session.Conditions.Remaining(outcome)))
             {
                 resultDismissed = false;
@@ -764,14 +782,14 @@ public sealed class MainWindow : Window
             ImGui.SameLine();
         }
 
-        if (Style.Action("Done"))
+        if (Style.Quiet("done"))
         {
             resultDismissed = true;
             StepBack();
         }
 
         ImGui.SameLine();
-        if (!Style.Action("Farm this again"))
+        if (!Style.Quiet("farm this again", "Back to the plan, with the same ground picked."))
             return;
 
         resultDismissed = true;
@@ -801,7 +819,7 @@ public sealed class MainWindow : Window
     private void DrawReturnTo()
     {
         ImGui.SameLine();
-        ImGui.SetNextItemWidth(160);
+        ImGui.SetNextItemWidth(Style.Px(160f));
 
         var choice = config.ReturnDestination == ReturnDestination.Home ? 1 : 0;
         if (!ImGui.Combo("##return-to", ref choice, "to where I started\0to my home point\0"))
@@ -822,14 +840,14 @@ public sealed class MainWindow : Window
         DrawStopWhen(mobs, session.Target);
 
         Style.Gap(2f);
-        if (Style.Action("Apply"))
+        if (Style.Commit("apply", "The run chases these targets from here on."))
         {
             session.Retarget(BuildConditions());
             adjusting = false;
         }
 
         ImGui.SameLine();
-        if (Style.Action("Cancel"))
+        if (Style.Quiet("never mind"))
             adjusting = false;
     }
 
@@ -854,12 +872,12 @@ public sealed class MainWindow : Window
 
         Style.Place(target.Name);
         Style.Level(area.Level);
-        ImGui.TextUnformatted(Where(area));
+        Style.Muffled(Where(area));
 
         // Coordinates in a row are trusted blind; the map is how the game
-        // answers "where is this exactly", so offer it before Start is pressed.
+        // answers "where is this exactly", so offer it before start is pressed.
         ImGui.SameLine();
-        if (Style.Row("map", "Flag it on the map and open the map there."))
+        if (Style.Quiet("map", "Flag it on the map and open the map there."))
             farming.ShowOnMap(area);
 
         Style.Trailing(Density(area));
@@ -921,10 +939,10 @@ public sealed class MainWindow : Window
             Style.Gap(2f);
         }
 
-        // The one thing on this screen worth pressing, coloured like it.
+        // The one control on this screen that moves the character.
         using (ImRaii.Disabled(job.Blocked || busy))
         {
-            if (Style.Primary("Start") && farming.Start(target, BuildConditions()))
+            if (Style.Commit("start") && farming.Start(target, BuildConditions()))
             {
                 resultDismissed = false;
                 ClearPlan();
@@ -932,7 +950,7 @@ public sealed class MainWindow : Window
         }
 
         ImGui.SameLine();
-        if (Style.Action("Back"))
+        if (Style.Quiet("back"))
             ClearPlan();
     }
 
@@ -943,17 +961,17 @@ public sealed class MainWindow : Window
     /// </summary>
     private void DrawStopWhen(MobIndex mobs, FarmTarget target)
     {
-        Style.Heading("Stop when");
+        Style.Heading("stop when");
 
-        ImGui.SetNextItemWidth(120);
+        ImGui.SetNextItemWidth(Style.Px(120f));
         ImGui.InputInt("kills", ref killTarget);
         ImGui.SameLine();
-        ImGui.SetNextItemWidth(120);
+        ImGui.SetNextItemWidth(Style.Px(120f));
         ImGui.InputInt("minutes", ref minuteTarget);
 
         if (target.Drops.Count > 0)
         {
-            Style.Heading(target.Shared ? "Collect, from any of them" : "Collect");
+            Style.Heading(target.Shared ? "collect, from any of them" : "collect");
             foreach (var itemId in target.Drops)
             {
                 using var id = ImRaii.PushId((int)itemId);
@@ -972,7 +990,7 @@ public sealed class MainWindow : Window
                     continue;
 
                 ImGui.SameLine();
-                ImGui.SetNextItemWidth(100);
+                ImGui.SetNextItemWidth(Style.Px(100f));
                 var quantity = itemGoals[itemId];
                 if (ImGui.InputInt("##quantity", ref quantity))
                     itemGoals[itemId] = Math.Max(1, quantity);
@@ -998,7 +1016,7 @@ public sealed class MainWindow : Window
         if (!tab)
             return;
 
-        Style.Heading("Needs");
+        Style.Heading("needs");
 
         // Everything this leans on is somebody else's plugin, found at runtime.
         // A missing one produces silence rather than an error, so the state of
@@ -1014,43 +1032,46 @@ public sealed class MainWindow : Window
 
             ImGui.TextColored(colour, mark);
             ImGui.SameLine();
-            ImGui.TextUnformatted(requirement.Name);
+            Style.Line(requirement.Name);
             Style.Trailing(requirement.Detail);
         }
 
         Style.Gap();
         ImGui.Separator();
-        Style.Heading("Getting about");
+        Style.Heading("getting about");
 
         var mountDistance = config.MountDistance;
-        ImGui.SetNextItemWidth(220);
+        ImGui.SetNextItemWidth(Style.Px(220f));
         if (ImGui.SliderFloat("mount with this much left to cover", ref mountDistance, 5f, 150f, "%.0f yalms"))
         {
             config.MountDistance = mountDistance;
             saveConfig();
         }
 
-        Style.Muffled("Ground still to walk, with attack range already taken off,");
-        Style.Muffled("so it means the same on a caster as on a melee job.");
+        Style.MuffledWrapped(
+            "Ground still to walk, with attack range already taken off, "
+            + "so it means the same on a caster as on a melee job.");
 
         Style.Gap(2f);
         var patience = config.RespawnPatienceSeconds;
-        ImGui.SetNextItemWidth(220);
+        ImGui.SetNextItemWidth(Style.Px(220f));
         if (ImGui.SliderFloat("look a little longer before moving on", ref patience, 0f, 30f, "%.0f seconds"))
         {
             config.RespawnPatienceSeconds = patience;
             saveConfig();
         }
 
-        Style.Muffled("Not a respawn wait: nothing comes back this quickly. It only stops");
-        Style.Muffled("a moment with nothing in view from sending it somewhere else.");
+        Style.MuffledWrapped(
+            "Not a respawn wait: nothing comes back this quickly. It only stops "
+            + "a moment with nothing in view from sending it somewhere else.");
 
         Style.Gap();
         ImGui.Separator();
-        Style.Heading("Going as the wrong job");
+        Style.Heading("going as the wrong job");
 
-        Style.Muffled("A crafter stands in the field doing nothing, and a battle job too");
-        Style.Muffled("far down dies in it. Neither says why, so this is checked first.");
+        Style.MuffledWrapped(
+            "A crafter stands in the field doing nothing, and a battle job too "
+            + "far down dies in it. Neither says why, so this is checked first.");
         Style.Gap(2f);
 
         foreach (var (policy, label, detail) in JobPolicies)
@@ -1075,7 +1096,7 @@ public sealed class MainWindow : Window
 
         Style.Gap();
         ImGui.Separator();
-        Style.Heading("While it runs");
+        Style.Heading("while it runs");
 
         var overlay = config.ShowOverlay;
         if (ImGui.Checkbox("small progress window while it runs", ref overlay))
@@ -1084,8 +1105,9 @@ public sealed class MainWindow : Window
             saveConfig();
         }
 
-        Style.Muffled("Floats beside the game with the bars and the Pause and Stop");
-        Style.Muffled("buttons, and goes away when the run ends.");
+        Style.MuffledWrapped(
+            "Floats beside the game with the bars and the pause and stop "
+            + "buttons, and goes away when the run ends.");
 
         Style.Gap(2f);
         var notifications = config.Notifications;
@@ -1098,7 +1120,7 @@ public sealed class MainWindow : Window
         // The chat line and toast are silent, and a run ends precisely when
         // nobody is looking at the screen.
         var sound = config.FinishSound;
-        ImGui.SetNextItemWidth(160);
+        ImGui.SetNextItemWidth(Style.Px(160f));
         if (ImGui.SliderInt(
                 "sound when a run ends", ref sound, 0, 16, sound == 0 ? "none" : $"<se.{sound}>"))
         {
@@ -1109,7 +1131,7 @@ public sealed class MainWindow : Window
         if (config.FinishSound > 0)
         {
             ImGui.SameLine();
-            if (Style.Row("play"))
+            if (Style.Quiet("play", "Ring it once, to hear which one this is."))
                 Notifier.Ring(config.FinishSound);
         }
 
@@ -1125,7 +1147,7 @@ public sealed class MainWindow : Window
             using var indent = ImRaii.PushIndent();
 
             var stance = (int)config.CompanionStance;
-            ImGui.SetNextItemWidth(160);
+            ImGui.SetNextItemWidth(Style.Px(160f));
             if (ImGui.Combo("stance", ref stance, "Free\0Defender\0Attacker\0Healer\0"))
             {
                 config.CompanionStance = (ChocoboStance)(stance + (int)ChocoboStance.Free);
@@ -1140,7 +1162,7 @@ public sealed class MainWindow : Window
 
         Style.Gap();
         ImGui.Separator();
-        Style.Heading("Afterwards");
+        Style.Heading("afterwards");
 
         var returnWhenDone = config.ReturnWhenDone;
         if (ImGui.Checkbox("teleport back when a run ends", ref returnWhenDone))
@@ -1152,8 +1174,9 @@ public sealed class MainWindow : Window
         if (config.ReturnWhenDone)
             DrawReturnTo();
 
-        Style.Muffled("Once a run ends on its own. One you stop yourself stays where");
-        Style.Muffled("it is, and so does one that ends by dying.");
+        Style.MuffledWrapped(
+            "Once a run ends on its own. One you stop yourself stays where "
+            + "it is, and so does one that ends by dying.");
 
         Style.Gap(2f);
         var record = config.RecordRuns;
@@ -1163,8 +1186,9 @@ public sealed class MainWindow : Window
             saveConfig();
         }
 
-        Style.Muffled("One file per run under the plugin's config folder,");
-        Style.Muffled("recording where it went and what was standing nearby.");
+        Style.MuffledWrapped(
+            "One file per run under the plugin's config folder, "
+            + "recording where it went and what was standing nearby.");
     }
 
     private void DrawItemIcon(MobIndex mobs, uint itemId) => DrawIcon(mobs.ItemIcon(itemId));
@@ -1274,7 +1298,7 @@ public sealed class MainWindow : Window
             return;
         }
 
-        if (Style.Row("back"))
+        if (Style.Quiet("back"))
         {
             selectedItem = 0;
             return;
@@ -1282,7 +1306,7 @@ public sealed class MainWindow : Window
 
         ImGui.SameLine();
         DrawItemIcon(mobs, selectedItem);
-        ImGui.TextUnformatted(selectedItemName);
+        Style.Line(selectedItemName);
         if (selectedItemWanted > 1)
             Style.Trailing($"{selectedItemWanted} wanted");
 
@@ -1292,7 +1316,7 @@ public sealed class MainWindow : Window
         var droppers = mobs.MobsDropping(selectedItem);
         if (droppers.Count == 0)
         {
-            Style.Muffled("Nothing known drops this.");
+            Style.Nothing("Nothing known drops this.");
             return;
         }
 
@@ -1305,8 +1329,9 @@ public sealed class MainWindow : Window
             return;
 
         Style.Gap();
-        Style.Muffled($"Also dropped by {Phrases.Kinds(nowhere.Select(mob => mob.Name).ToList())},");
-        Style.Muffled("with nowhere recorded to find them.");
+        Style.MuffledWrapped(
+            $"Also dropped by {Phrases.Kinds(nowhere.Select(mob => mob.Name).ToList())}, "
+            + "with nowhere recorded to find them.");
     }
 
     /// <summary>
@@ -1381,7 +1406,7 @@ public sealed class MainWindow : Window
                 continue;
 
             ImGui.SameLine();
-            if (Style.Row(distinct[i]))
+            if (Style.Quiet(distinct[i]))
                 Plan(new FarmTarget(mob, own));
 
             Style.Explain(
@@ -1417,10 +1442,10 @@ public sealed class MainWindow : Window
         // Named in front of the box rather than behind it. ImGui puts a label
         // after the control, and "go as" reads backwards when the answer to it
         // has already been given.
-        ImGui.TextUnformatted("go as");
+        Style.Line("go as");
         ImGui.SameLine();
 
-        ImGui.SetNextItemWidth(240);
+        ImGui.SetNextItemWidth(Style.Px(240f));
         if (!ImGui.BeginCombo("##go-as", preferred is null ? Suits : $"{preferred.Name}   Lv{preferred.Level}"))
             return;
 
@@ -1607,10 +1632,9 @@ public sealed class MainWindow : Window
 
         if (farmable.Count == 0)
         {
-            Style.Gap();
-            Style.Muffled("Nothing on this list is worth farming a mob for.");
-            if (rest > 0)
-                Style.Muffled($"Its {rest} material(s) are gathered, bought or crafted.");
+            Style.Nothing(rest > 0
+                ? $"Nothing on this list is worth farming a mob for. Its {rest} material(s) are gathered, bought or crafted."
+                : "Nothing on this list is worth farming a mob for.");
             return;
         }
 
@@ -1688,8 +1712,8 @@ public sealed class MainWindow : Window
 
         using (ImRaii.Disabled(farming.Running))
         {
-            if (Style.Action(
-                    legs.Count == 1 ? "Farm what is left" : $"Farm the whole list, {legs.Count} stops",
+            if (Style.Commit(
+                    legs.Count == 1 ? "farm what is left" : $"farm the whole list, {legs.Count} stops",
                     "One run per material, in zone order, each going for what is still missing."))
             {
                 farming.StartMany(legs);

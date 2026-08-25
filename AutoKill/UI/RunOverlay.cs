@@ -35,14 +35,18 @@ public sealed class RunOverlay : Window
 
     private readonly Func<MobIndex?> index;
     private readonly FarmController farming;
+    private readonly IPlayerState player;
     private readonly Configuration config;
     private readonly ITextureProvider textures;
     private readonly PastRuns past;
     private readonly Action openMain;
 
+    private IDisposable? shell;
+
     public RunOverlay(
         Func<MobIndex?> index,
         FarmController farming,
+        IPlayerState player,
         Configuration config,
         ITextureProvider textures,
         PastRuns past,
@@ -57,6 +61,7 @@ public sealed class RunOverlay : Window
     {
         this.index = index;
         this.farming = farming;
+        this.player = player;
         this.config = config;
         this.textures = textures;
         this.past = past;
@@ -77,23 +82,33 @@ public sealed class RunOverlay : Window
     public override bool DrawConditions() =>
         config.ShowOverlay && farming.Current is { Phase: not FarmPhase.Finished };
 
+    public override void PreDraw() => shell = Style.Shell();
+
+    public override void PostDraw()
+    {
+        shell?.Dispose();
+        shell = null;
+    }
+
     public override void Draw()
     {
         if (farming.Current is not { } session || session.Phase == FarmPhase.Finished)
             return;
 
-        using var style = Style.Window();
+        // No title bar on this window, so the masthead is the only place its
+        // name appears at all.
+        Style.Masthead("AutoKill", Whose());
 
         var progress = session.Progress;
         var paused = session.Phase == FarmPhase.Paused;
 
-        Style.Place(session.Target.Name);
+        Style.Line(session.Target.Name);
         Style.Trailing($"{progress.Elapsed:hh\\:mm\\:ss}");
 
-        ImGui.PushTextWrapPos(WrapAt);
+        ImGui.PushTextWrapPos(Style.Px(WrapAt));
         ImGui.TextColored(
             paused ? Style.Accent : Style.Muted,
-            paused ? $"Paused: {session.Status}" : session.Status);
+            paused ? $"paused: {session.Status}" : session.Status);
         ImGui.PopTextWrapPos();
 
         if (farming.Queued > 0)
@@ -102,7 +117,7 @@ public sealed class RunOverlay : Window
         var kills = session.Conditions.Conditions.OfType<KillCountCondition>().FirstOrDefault();
         if (kills is null)
         {
-            ImGui.TextUnformatted("kills");
+            Style.Line("kills");
             Style.Trailing(progress.Kills.ToString());
         }
         else
@@ -131,22 +146,24 @@ public sealed class RunOverlay : Window
         Style.Gap(2f);
         if (paused)
         {
-            if (Style.Action("Resume"))
+            if (Style.Row("resume"))
                 farming.Resume();
         }
-        else if (Style.Action("Pause"))
+        else if (Style.Row("pause"))
         {
             farming.Pause();
         }
 
         ImGui.SameLine();
-        if (Style.Action("Stop"))
+        if (Style.Row("stop"))
             farming.Stop();
 
         ImGui.SameLine();
-        if (Style.Action(FontAwesomeIcon.Cog, "Open the main window: the tabs, the plan and the settings."))
+        if (Style.Quiet(FontAwesomeIcon.Cog, "Open the main window: the tabs, the plan and the settings."))
             openMain();
     }
+
+    private string Whose() => player.CharacterName is { Length: > 0 } name ? name : string.Empty;
 
     private string ItemName(uint itemId) => index()?.ItemName(itemId) ?? $"item {itemId}";
 }

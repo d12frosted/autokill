@@ -21,6 +21,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
     [PluginService] internal static IFramework Framework { get; private set; } = null!;
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
+    [PluginService] internal static IPlayerState PlayerState { get; private set; } = null!;
     [PluginService] internal static IObjectTable Objects { get; private set; } = null!;
     [PluginService] internal static ITargetManager Targets { get; private set; } = null!;
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
@@ -75,10 +76,11 @@ public sealed class Plugin : IDalamudPlugin
         var past = new PastRuns(history);
 
         mainWindow = new MainWindow(
-            () => index, farming, Textures, config, observations, history, artisan, hunts, fates, past, Save);
+            () => index, farming, PlayerState, Textures, config, observations, history, artisan, hunts, fates, past,
+            Save);
         windows.AddWindow(mainWindow);
         windows.AddWindow(new RunOverlay(
-            () => index, farming, config, Textures, past, () => mainWindow.IsOpen = true));
+            () => index, farming, PlayerState, config, Textures, past, () => mainWindow.IsOpen = true));
 
         PluginInterface.UiBuilder.Draw += windows.Draw;
         PluginInterface.UiBuilder.OpenMainUi += OpenMainUi;
