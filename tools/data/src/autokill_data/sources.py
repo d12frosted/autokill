@@ -22,6 +22,10 @@ TEAMCRAFT_JSON = (
 DATAMINING_CSV = (
     "https://raw.githubusercontent.com/xivapi/ffxiv-datamining/master/csv/en/{name}.csv"
 )
+SUPPLEMENTAL_CSV = (
+    "https://raw.githubusercontent.com/Critical-Impact/LuminaSupplemental"
+    "/main/src/LuminaSupplemental.Excel/Generated/{name}.csv"
+)
 GARLAND_MOB_INDEX = "https://www.garlandtools.org/db/doc/browse/en/2/mob.json"
 GARLAND_MOB_DOC = "https://www.garlandtools.org/db/doc/mob/en/2/{mob_id}.json"
 
@@ -67,6 +71,19 @@ def teamcraft(cache: Cache, name: str) -> Any:
 def datamining_csv(cache: Cache, name: str) -> list[dict[str, str]]:
     """Read a datamining CSV. Row 0 holds column names, rows 1+ hold data."""
     raw = cache.get(f"datamining/{name}.csv", DATAMINING_CSV.format(name=name))
+    rows = list(csv.reader(raw.decode("utf-8-sig").splitlines()))
+    header = rows[0]
+    return [dict(zip(header, row)) for row in rows[1:] if row]
+
+
+def supplemental_csv(cache: Cache, name: str) -> list[dict[str, str]]:
+    """Read a LuminaSupplemental CSV.
+
+    The plugin gets these at runtime out of the LuminaSupplemental package
+    rather than from here, so this is only for measuring what the plugin will
+    have. Same shape, one header row.
+    """
+    raw = cache.get(f"supplemental/{name}.csv", SUPPLEMENTAL_CSV.format(name=name))
     rows = list(csv.reader(raw.decode("utf-8-sig").splitlines()))
     header = rows[0]
     return [dict(zip(header, row)) for row in rows[1:] if row]
