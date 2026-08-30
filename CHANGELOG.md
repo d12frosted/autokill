@@ -186,6 +186,19 @@ reading the diff. Dates are when the tag went out.
   the list never wants next. Done now lands on the list itself, counts fresh,
   with the next thing to farm in view.
 
+### Fixed
+
+- **A crafting list that reads as empty says so, and can be unstuck.** A list
+  with nothing on it used to report "nothing a mob drops", word for word what a
+  full list of gathered materials says, so a list that had just been filled read
+  as one this plugin had nothing to offer for. It now says the list is empty,
+  which is the useful half: empty here and full in Artisan is nearly always
+  Artisan holding it. Filling a list with "Add all visible" loses Artisan's save
+  on 4.0.5.18 and earlier, so those recipes never reach the file the lists are
+  read from. An empty list now carries a button that asks Artisan to write its
+  file, by handing it back a setting it already has, and the list turns up a
+  moment later. Adding recipes one at a time was never affected.
+
 ## 0.0.4 - 2026-08-20
 
 ### Added

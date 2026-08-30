@@ -160,4 +160,28 @@ public class CraftingListTests
         Assert.Equal(0, CraftingLists.StillNeeded(30, 30));
         Assert.Equal(0, CraftingLists.StillNeeded(30, 45));
     }
+
+    /// <summary>
+    /// A list nobody has put anything on is its own answer, and has to be told
+    /// apart from a full list of things no mob carries. Both show no rows, and
+    /// only one of them is somebody else's fault.
+    /// </summary>
+    [Fact]
+    public void AnEmptyListIsNotTheSameAsAListWithNothingToFarm()
+    {
+        Assert.Equal(ListStanding.Empty, CraftingLists.Standing(0, 0, 0));
+        Assert.Equal(ListStanding.NothingToFarm, CraftingLists.Standing(12, 0, 0));
+    }
+
+    [Fact]
+    public void AListWhoseDropsAreAllInTheBagsIsGathered()
+    {
+        Assert.Equal(ListStanding.Gathered, CraftingLists.Standing(12, 3, 0));
+    }
+
+    [Fact]
+    public void AListWithSomethingLeftIsWorthGoingOutFor()
+    {
+        Assert.Equal(ListStanding.Outstanding, CraftingLists.Standing(12, 3, 1));
+    }
 }

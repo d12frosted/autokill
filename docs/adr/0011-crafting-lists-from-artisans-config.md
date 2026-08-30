@@ -49,3 +49,27 @@ Offer only the materials something is known to drop, and say how many were left 
   mob drop, so nothing misleading survives the filter.
 - Only the handful of fields being read can break, and a file that fails to parse is
   logged and treated as no lists rather than as an error.
+
+## Amendment: one call out to Artisan
+
+Reading stays as decided, and writing Artisan's file is still not on the table. There is
+one call out.
+
+Artisan saves its config on every list edit, except one. Filling a list with "Add all
+visible" adds the recipes in a background task and then, in the continuation, refreshes its
+own table before saving. The refresh reads the local player, which Dalamud only allows on
+the main thread, so the exception lands on the line before the save. The recipes stay in
+memory and never reach the file, and the list reads as empty here while being full in
+Artisan. Seen on Artisan 4.0.5.18 against Dalamud 15.0.3.2.
+
+So an empty list now says it is empty rather than "nothing a mob drops", which was the same
+sentence a full list of gathered materials gets, and it carries a button that asks Artisan
+to write its file. There is no endpoint for "save yourself", so the ask is
+`Artisan.ChangeStandardMinimumStepsBeforeMiracle` handed back the value already in the
+file: every `Change...` endpoint assigns a value and then saves the whole config, so this
+saves everything and changes nothing.
+
+It is skipped while Artisan is busy, since another plugin may have a temporary override in
+flight over the same setting, and it is a button rather than something done on a timer,
+because writing another plugin's configuration is not something to do behind somebody's
+back.

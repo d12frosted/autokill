@@ -54,7 +54,8 @@ public sealed class Plugin : IDalamudPlugin
 
         // Beside this plugin's own configuration file, where every plugin's is.
         var artisan = new ArtisanLists(
-            Path.Combine(PluginInterface.ConfigFile.Directory!.FullName, "Artisan.json"), DataManager, Log);
+            Path.Combine(PluginInterface.ConfigFile.Directory!.FullName, "Artisan.json"), DataManager, Log,
+            new ArtisanIpc(PluginInterface, Log));
 
         var hunts = new HuntBills(DataManager, Log);
         var fates = new Fates(FateTable, ClientState);
