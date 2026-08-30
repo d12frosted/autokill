@@ -129,6 +129,15 @@ public sealed class RunOverlay : Window
                     past.KillsPace(session.Target)));
         }
 
+        // A hunting log run counts each mob on its own, since the field holds
+        // several entries' worth of them and the total says nothing about which.
+        foreach (var mob in session.Conditions.Conditions.OfType<MobKillCondition>())
+            // Clamped: a field holds more than one of them, so a target can be
+            // overshot by whatever else was already swinging, and "8 / 3" reads
+            // as a fault rather than as done.
+            Style.Progress(
+                mob.Name, Math.Min(progress.KillsOf(mob.BNpcNameId), mob.Target), mob.Target);
+
         foreach (var wanted in session.Conditions.Conditions.OfType<ItemCountCondition>())
         {
             var have = progress.CountOf(wanted.ItemId);

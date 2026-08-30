@@ -23,3 +23,4 @@ Status values: `Proposed`, `Accepted`, `Superseded by NNNN`, `Rejected`.
 | [0012](0012-hunt-bills-come-from-the-client.md) | Hunt bills come from the client | Accepted |
 | [0013](0013-a-run-goes-after-a-set-of-mobs.md) | A run goes after a set of mobs | Accepted |
 | [0014](0014-check-the-job-before-the-teleport.md) | Check the job before the teleport | Accepted |
+| [0015](0015-the-hunting-log-is-a-rank-at-a-time.md) | The hunting log is a rank at a time | Accepted |

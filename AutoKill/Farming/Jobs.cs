@@ -59,7 +59,7 @@ public sealed class Jobs(
             found.Add(new JobSwitch(
                 entry.Id,
                 entry.NameString,
-                new JobStanding(job.RowId, Named(job), Doing(job), LevelOf(job))));
+                new JobStanding(job.RowId, Named(job), Doing(job), LevelOfClass(job))));
         }
 
         return found;
@@ -84,6 +84,30 @@ public sealed class Jobs(
             : [];
 
         return JobFitness.Plan(job, target, gearsets, policy, config.PreferredJob);
+    }
+
+    /// <summary>
+    /// What starting a run would do when the class is not ours to choose.
+    /// </summary>
+    /// <remarks>
+    /// The hunting log names who has to land the kill, so the gearsets are
+    /// walked every time rather than only when something is wrong: the class
+    /// being asked for is usually not the one being worn, and that is the
+    /// ordinary case here rather than the exception.
+    /// </remarks>
+    public JobPlan PlanAs(LevelRange? target, uint classJobId)
+    {
+        if (Current is not { } job)
+            return Nothing;
+
+        var named = data.GetExcelSheet<ClassJob>().GetRowOrDefault(classJobId);
+        return JobFitness.PlanAs(
+            job,
+            target,
+            Gearsets(),
+            classJobId,
+            named is { } row ? Named(row) : "that class",
+            config.JobPolicy);
     }
 
     /// <summary>
@@ -151,14 +175,14 @@ public sealed class Jobs(
         Enum.IsDefined(typeof(JobRole), (int)job.Role) ? (JobRole)job.Role : JobRole.None;
 
     /// <summary>
-    /// How far this class has got, whoever is currently wearing it.
+    /// How far this class has got, whether or not it is being worn.
     /// </summary>
     /// <remarks>
     /// Levels are held per experience slot rather than per class row, which is
     /// how a class and the job it becomes share one level. A row with no slot is
     /// nothing anyone levels.
     /// </remarks>
-    private static unsafe int LevelOf(ClassJob job)
+    public static unsafe int LevelOfClass(ClassJob job)
     {
         var state = PlayerState.Instance();
         if (state == null || job.ExpArrayIndex < 0)

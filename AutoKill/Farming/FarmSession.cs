@@ -209,6 +209,10 @@ public sealed class FarmSession
     private DateTime lastField = DateTime.MinValue;
     private int kills;
 
+    // Broken out by what was killed, because a field can hold several hunting
+    // log entries at once and each of them counts its own mob.
+    private readonly Dictionary<uint, int> killsByMob = [];
+
     public FarmSession(
         FarmTarget target,
         StopConditions conditions,
@@ -249,6 +253,10 @@ public sealed class FarmSession
         // Anything already in the bags is not something this run produced.
         foreach (var itemId in target.Drops)
             baselineCounts[itemId] = Bags.CountOf(itemId);
+
+        // The field can hold more kinds than the run has a count for, from the
+        // first tick: a stop before this one may have finished one of them.
+        NarrowQuarry();
 
         Phase = FarmPhase.Teleporting;
         Status = "starting";
@@ -302,6 +310,13 @@ public sealed class FarmSession
     public bool Died { get; private set; }
 
     /// <summary>
+    /// The class the run has to be done as, or zero for whatever suits the
+    /// field. Kept so that picking the run back up goes as the same thing: a
+    /// hunting log counts the kill for one class and nobody else.
+    /// </summary>
+    public uint As { get; init; }
+
+    /// <summary>
     /// Whether the run ended mid-fight and left the rotation running.
     /// </summary>
     /// <remarks>
@@ -330,7 +345,8 @@ public sealed class FarmSession
         objects.LocalPlayer?.Level ?? 0,
         Bags.IsFull(),
         objects.LocalPlayer is { IsDead: true },
-        gained);
+        gained,
+        killsByMob);
 
     public void Tick()
     {
@@ -420,6 +436,7 @@ public sealed class FarmSession
             return;
 
         conditions = fresh;
+        NarrowQuarry();
         recorder?.Write("retarget", new
         {
             targets = fresh.Conditions.Select(c => c.GetType().Name),
@@ -1062,7 +1079,7 @@ public sealed class FarmSession
         // The soonest any of them comes back, since a spot with something on it
         // is worth returning to whichever of them is standing there. Nothing
         // learnt yet leaves the usual guess.
-        var expected = target.BNpcNameIds
+        var expected = nameIds
                            .Select(id => observations.Known(id, area.TerritoryTypeId)?.Typical())
                            .Where(typical => typical is not null)
                            .Select(typical => typical!.Value.Typical)
@@ -1759,7 +1776,10 @@ public sealed class FarmSession
             kills++;
 
             if (engagedName.Remove(id, out var what))
+            {
+                killsByMob[what] = killsByMob.GetValueOrDefault(what) + 1;
                 observations.RecordKill(what, area.TerritoryTypeId);
+            }
 
             recorder?.Write("kill", new
             {
@@ -1771,6 +1791,54 @@ public sealed class FarmSession
                 spot = spotIndex % Math.Max(1, area.Spots.Count),
             });
         }
+
+        if (dead.Count > 0)
+            NarrowQuarry();
+    }
+
+    /// <summary>
+    /// Go after exactly what the run still has a count for.
+    /// </summary>
+    /// <remarks>
+    /// Only for runs that count mobs separately, which today means the hunting
+    /// log. An item run wants the whole field for as long as it lasts.
+    ///
+    /// Two ways the field ends up holding more than the run wants. A target
+    /// fills up mid-run, and the others do not fill with it: left in the
+    /// quarry, the fastest to come back keep the ground looking busy, no spot
+    /// is ever judged cleared, and the run stands where it is killing what it
+    /// already has enough of. Or the run arrives already wanting less than
+    /// stands there, because a stop earlier in the list finished one of them,
+    /// or because a run picked back up after a death drops what it had already
+    /// done. Then the mob has no count at all behind it, and hunting it is
+    /// killing with no number to reach and no reason to stop.
+    ///
+    /// Everything that decides what to attack, whether a spot is cleared and
+    /// when ground is worth returning to reads this set, so narrowing it is the
+    /// whole of it. Never emptied: when the last count fills the run is over,
+    /// and the stop check on the next tick is what says so.
+    /// </remarks>
+    private void NarrowQuarry()
+    {
+        var counted = conditions.MobsCounted;
+        if (counted.Count == 0)
+            return;
+
+        var done = conditions.MobsDone(Progress);
+        var keep = nameIds
+            .Where(id => counted.Contains(id) && !done.Contains(id))
+            .ToHashSet();
+
+        if (keep.Count == 0 || keep.Count == nameIds.Count)
+            return;
+
+        nameIds.Clear();
+        nameIds.UnionWith(keep);
+
+        recorder?.Write("quarry", new
+        {
+            left = nameIds.Select(target.NameOf).ToArray(),
+        });
     }
 
     private void RefreshGains()
