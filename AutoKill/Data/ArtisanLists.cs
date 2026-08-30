@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AutoKill.Core;
+using AutoKill.IPC;
 using Dalamud.Plugin.Services;
 using Lumina.Excel.Sheets;
 
@@ -22,15 +23,17 @@ public sealed record ListMaterial(uint ItemId, string Name, ushort Icon, int Req
 /// </summary>
 /// <remarks>
 /// Artisan keeps its lists in its own configuration file, which sits beside this
-/// plugin's own. Reading that file is the whole of it: no IPC, no reaching into
-/// a running plugin, and nothing that stops working when Artisan is not loaded.
+/// plugin's own. Reading that file is nearly the whole of it: no reaching into a
+/// running plugin, and lists stay readable when Artisan is not even loaded.
 ///
 /// The cost is that the file only changes when Artisan saves it, so a list being
-/// edited right now reads as it was last saved. Artisan saves eagerly, and the
-/// file is re-read whenever it changes on disk, so in practice this settles
-/// within a moment of finishing an edit.
+/// edited right now reads as it was last saved. Artisan does save on every edit,
+/// and the file is re-read whenever it changes on disk, so usually this settles
+/// within a moment. Usually: see <see cref="ArtisanQuirks"/> for the edit that
+/// never reaches its own save, which is why there is one call out to Artisan
+/// here and nothing else.
 /// </remarks>
-public sealed class ArtisanLists(string path, IDataManager data, IPluginLog log)
+public sealed class ArtisanLists(string path, IDataManager data, IPluginLog log, ArtisanIpc ipc)
 {
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
@@ -44,6 +47,10 @@ public sealed class ArtisanLists(string path, IDataManager data, IPluginLog log)
     private DateTime lastWritten = DateTime.MinValue;
     private Dictionary<uint, uint>? byResult;
 
+    // Read alongside the lists so that asking Artisan to save hands back a
+    // setting it already holds. Nothing else here has any use for it.
+    private int? minimumStepsBeforeMiracle;
+
     // Working out what a list needs means following every subcraft down, which
     // is far too much to do for every list on every frame a picker is open.
     // Thrown away whole whenever the file is read again, since that is the only
@@ -54,6 +61,22 @@ public sealed class ArtisanLists(string path, IDataManager data, IPluginLog log)
 
     /// <summary>Whether Artisan has ever been set up on this character's install.</summary>
     public bool Installed { get; private set; }
+
+    /// <summary>Which Artisan is running, or nothing when none is.</summary>
+    public Version? Version => ipc.Version;
+
+    /// <summary>
+    /// Whether there is a running Artisan to ask, and something to hand it.
+    /// </summary>
+    public bool CanAskToSave => ipc.Version is not null && minimumStepsBeforeMiracle is not null;
+
+    /// <summary>
+    /// Ask Artisan to write out what it is holding, for a list that is full in
+    /// Artisan and empty here. The next check of the file picks up whatever that
+    /// produced.
+    /// </summary>
+    public bool AskToSave() =>
+        minimumStepsBeforeMiracle is { } steps && ipc.Save(steps);
 
     /// <summary>
     /// Re-read the lists if the file has changed since last time. Cheap enough
@@ -90,6 +113,8 @@ public sealed class ArtisanLists(string path, IDataManager data, IPluginLog log)
         {
             using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             var config = JsonSerializer.Deserialize<ArtisanConfig>(stream, Json);
+
+            minimumStepsBeforeMiracle = config?.MinimumStepsBeforeMiracle;
 
             return (config?.NewCraftingLists ?? [])
                 .Where(list => !string.IsNullOrWhiteSpace(list.Name))
@@ -180,6 +205,9 @@ public sealed class ArtisanLists(string path, IDataManager data, IPluginLog log)
     private sealed class ArtisanConfig
     {
         public List<ArtisanList>? NewCraftingLists { get; set; }
+
+        /// <summary>Not used for anything, only handed back. See <see cref="AskToSave"/>.</summary>
+        public int? MinimumStepsBeforeMiracle { get; set; }
     }
 
     private sealed class ArtisanList

@@ -16,6 +16,22 @@ public sealed record CraftRecipe(
     int Yield,
     IReadOnlyList<CraftIngredient> Ingredients);
 
+/// <summary>Where a crafting list stands for someone deciding whether to go out.</summary>
+public enum ListStanding
+{
+    /// <summary>Nothing on it at all.</summary>
+    Empty,
+
+    /// <summary>Things on it, none of them anything a mob carries.</summary>
+    NothingToFarm,
+
+    /// <summary>Everything a mob carries is in the bags already.</summary>
+    Gathered,
+
+    /// <summary>Something on it is still worth going out for.</summary>
+    Outstanding,
+}
+
 /// <summary>
 /// What a crafting list asks you to bring.
 /// </summary>
@@ -90,4 +106,19 @@ public static class CraftingLists
     /// again from nothing.
     /// </summary>
     public static int StillNeeded(int required, int held) => Math.Max(0, required - held);
+
+    /// <summary>
+    /// What a list amounts to, said in one word.
+    /// </summary>
+    /// <remarks>
+    /// Empty is asked first and on purpose. A list with nothing on it and a list
+    /// of thirty things no mob carries both come out as no rows to show, and
+    /// telling somebody there is nothing to farm on a list they have just filled
+    /// sends them looking for the fault in the wrong plugin.
+    /// </remarks>
+    public static ListStanding Standing(int onTheList, int farmable, int stillNeeded) =>
+        onTheList == 0 ? ListStanding.Empty
+        : farmable == 0 ? ListStanding.NothingToFarm
+        : stillNeeded == 0 ? ListStanding.Gathered
+        : ListStanding.Outstanding;
 }

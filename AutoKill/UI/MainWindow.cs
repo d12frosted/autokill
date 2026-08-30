@@ -50,6 +50,10 @@ public sealed class MainWindow : Window
     private CraftingList? craftingList;
     private IReadOnlyList<ListMaterial> craftingMaterials = [];
 
+    // Artisan turning the ask down. Kept only until the file is read again,
+    // since that is the point at which the answer stops being about now.
+    private bool artisanRefused;
+
     private FarmTarget? plannedTarget;
     private readonly Dictionary<uint, int> itemGoals = [];
     private int killTarget;
@@ -1888,20 +1892,28 @@ public sealed class MainWindow : Window
     /// </summary>
     private (string Says, Vector4 Colour) Outstanding(MobIndex mobs, CraftingList list)
     {
-        var farmable = artisan.Materials(list)
+        var farmable = Farmable(mobs, artisan.Materials(list));
+        var left = Missing(farmable);
+
+        return CraftingLists.Standing(list.Entries.Count, farmable.Count, left) switch
+        {
+            ListStanding.Empty => ("empty", Style.Muted),
+            ListStanding.NothingToFarm => ("nothing a mob drops", Style.Muted),
+            ListStanding.Gathered => ("all gathered", Style.Good),
+            _ => ($"{left} to farm", Style.Accent),
+        };
+    }
+
+    /// <summary>What on a list a mob can actually supply.</summary>
+    private static List<ListMaterial> Farmable(MobIndex mobs, IEnumerable<ListMaterial> materials) =>
+        materials
             .Where(material => !material.Crystal && mobs.AnythingDrops(material.ItemId))
             .ToList();
 
-        if (farmable.Count == 0)
-            return ("nothing a mob drops", Style.Muted);
-
-        var left = farmable.Count(material =>
+    /// <summary>How many of those the bags do not hold enough of.</summary>
+    private static int Missing(IEnumerable<ListMaterial> farmable) =>
+        farmable.Count(material =>
             CraftingLists.StillNeeded(material.Required, Bags.CountOf(material.ItemId)) > 0);
-
-        return left == 0
-            ? ("all gathered", Style.Good)
-            : ($"{left} to farm", Style.Accent);
-    }
 
     private void ChooseCraftingList(CraftingList? list)
     {
@@ -1913,6 +1925,33 @@ public sealed class MainWindow : Window
     {
         craftingList = list;
         craftingMaterials = list is null ? [] : artisan.Materials(list);
+        artisanRefused = false;
+    }
+
+    /// <summary>
+    /// A list with nothing on it, which is nearly always Artisan holding one it
+    /// has not written out.
+    /// </summary>
+    /// <remarks>
+    /// Said as its own thing rather than folded in with a list of materials no
+    /// mob carries. They look identical from here, and only one of them is worth
+    /// somebody doing anything about.
+    /// </remarks>
+    private void DrawEmptyList()
+    {
+        Style.Nothing("There is nothing on this list.");
+        Style.MuffledWrapped(ArtisanQuirks.WhyEmpty(artisan.Version));
+
+        if (!artisan.CanAskToSave)
+            return;
+
+        Style.Gap();
+
+        if (Style.Row("Ask Artisan to save", "Hands Artisan back a setting it already has, which makes it write its file."))
+            artisanRefused = !artisan.AskToSave();
+
+        if (artisanRefused)
+            Style.Muffled("Artisan did not take the ask, most likely because it is busy crafting.");
     }
 
     /// <summary>
@@ -1926,13 +1965,18 @@ public sealed class MainWindow : Window
     /// </remarks>
     private void DrawCraftingMaterials(MobIndex mobs)
     {
-        var farmable = craftingMaterials
-            .Where(material => !material.Crystal && mobs.AnythingDrops(material.ItemId))
-            .ToList();
-
+        var farmable = Farmable(mobs, craftingMaterials);
         var rest = craftingMaterials.Count - farmable.Count;
+        var standing = CraftingLists.Standing(
+            craftingList?.Entries.Count ?? 0, farmable.Count, Missing(farmable));
 
-        if (farmable.Count == 0)
+        if (standing is ListStanding.Empty)
+        {
+            DrawEmptyList();
+            return;
+        }
+
+        if (standing is ListStanding.NothingToFarm)
         {
             Style.Nothing(rest > 0
                 ? $"Nothing on this list is worth farming a mob for. Its {rest} material(s) are gathered, bought or crafted."
