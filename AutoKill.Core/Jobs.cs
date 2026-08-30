@@ -41,6 +41,12 @@ public enum JobProblem
 
     /// <summary>It fights, but not this high up.</summary>
     Underlevelled,
+
+    /// <summary>
+    /// Something else named the class, and there is no gearset to put it on
+    /// with. The game offers no way to equip a bare one.
+    /// </summary>
+    NoGearset,
 }
 
 /// <summary>What to do about a character that cannot fight what was picked.</summary>
@@ -191,5 +197,73 @@ public static class JobFitness
                 ? new JobPlan(problem, change, false, $"{trouble} Switching to {change.Job.Name} first.")
                 : new JobPlan(problem, null, true, $"{trouble} Nothing you can switch to gets there."),
         };
+    }
+
+    /// <summary>
+    /// What starting a run would do when the class is not this plugin's choice
+    /// to make.
+    /// </summary>
+    /// <remarks>
+    /// The hunting log only counts a kill for the class whose log it is, so
+    /// everything Plan does is turned around. There is no picking the gearset
+    /// that clears the field fastest: there is one class it can be, and either
+    /// there is a gearset for it or the log cannot be farmed at all.
+    ///
+    /// Being under-levelled stops being a reason to change into something else,
+    /// since changing is the one thing that must not happen, so it comes down to
+    /// going anyway or refusing. Refusing still refuses, because somebody who
+    /// asked to be stopped asked to be stopped.
+    ///
+    /// Among the gearsets for the class it is the earliest, since they are all
+    /// the same class at the same level and the answer has to come out the same
+    /// every time.
+    /// </remarks>
+    public static JobPlan PlanAs(
+        JobStanding job,
+        LevelRange? target,
+        IReadOnlyList<JobSwitch> gearsets,
+        uint classJobId,
+        string className,
+        JobPolicy policy)
+    {
+        if (job.ClassJobId != classJobId)
+        {
+            var wear = gearsets
+                .Where(gearset => gearset.Job.ClassJobId == classJobId)
+                .OrderBy(gearset => gearset.GearsetId)
+                .FirstOrDefault();
+
+            if (wear is null)
+                return new JobPlan(
+                    JobProblem.NoGearset,
+                    null,
+                    true,
+                    $"You have no {className} gearset to put on.");
+
+            var trouble = Trouble(wear.Job, target);
+            if (trouble is null)
+                return new JobPlan(
+                    JobProblem.None,
+                    wear,
+                    false,
+                    $"The log is {className}'s. Switching to it first.");
+
+            return policy == JobPolicy.Refuse
+                ? new JobPlan(Problem(wear.Job, target), null, true, trouble)
+                : new JobPlan(
+                    Problem(wear.Job, target),
+                    wear,
+                    false,
+                    $"{trouble} Switching to {className} anyway.");
+        }
+
+        var problem = Problem(job, target);
+        if (problem == JobProblem.None)
+            return new JobPlan(problem, null, false, null);
+
+        var wrong = Trouble(job, target);
+        return policy == JobPolicy.Refuse
+            ? new JobPlan(problem, null, true, wrong)
+            : new JobPlan(problem, null, false, $"{wrong} Going anyway.");
     }
 }

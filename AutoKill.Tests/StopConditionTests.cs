@@ -11,13 +11,19 @@ public class StopConditionTests
         int level = 1,
         bool inventoryFull = false,
         bool died = false,
-        (uint Item, int Count)[]? items = null)
+        (uint Item, int Count)[]? items = null,
+        (uint Mob, int Count)[]? mobs = null)
     {
         var gained = new Dictionary<uint, int>();
         foreach (var (item, count) in items ?? [])
             gained[item] = count;
 
-        return new FarmProgress(kills, TimeSpan.FromMinutes(minutes), level, inventoryFull, died, gained);
+        var killed = new Dictionary<uint, int>();
+        foreach (var (mob, count) in mobs ?? [])
+            killed[mob] = count;
+
+        return new FarmProgress(
+            kills, TimeSpan.FromMinutes(minutes), level, inventoryFull, died, gained, killed);
     }
 
     [Fact]
@@ -120,5 +126,92 @@ public class StopConditionTests
     {
         Assert.Equal("kills 37/200", new KillCountCondition(200).Describe(Progress(kills: 37)));
         Assert.Equal("item 36203 12/30", new ItemCountCondition(36203, 30).Describe(Progress(items: [(36203, 12)])));
+    }
+
+    [Fact]
+    public void AMobKillTargetCountsOnlyThatMob()
+    {
+        var condition = new MobKillCondition(49, "wharf rat", 3);
+
+        Assert.False(condition.IsMet(Progress(kills: 30, mobs: [(50, 12)])));
+        Assert.False(condition.IsMet(Progress(mobs: [(49, 2)])));
+        Assert.True(condition.IsMet(Progress(mobs: [(49, 3)])));
+    }
+
+    [Fact]
+    public void AMobKillTargetSaysWhichMobItIsWaitingOn()
+    {
+        var condition = new MobKillCondition(49, "wharf rat", 3);
+
+        Assert.Equal("wharf rat 2/3", condition.Describe(Progress(mobs: [(49, 2)])));
+    }
+
+    [Fact]
+    public void MobsWhoseCountIsInAreNotWorthAnotherSwing()
+    {
+        var conditions = new StopConditions(
+            [
+                new MobKillCondition(49, "lemur", 3),
+                new MobKillCondition(50, "mandragora", 3),
+                new DeathCondition(),
+            ],
+            StopMode.All);
+
+        Assert.Equal([49u], conditions.MobsDone(Progress(mobs: [(49, 8), (50, 1)])));
+    }
+
+    [Fact]
+    public void NothingIsDoneWhenNothingCountsMobsSeparately()
+    {
+        // An item run kills everything in the field on purpose: no mob on it
+        // has a count of its own to fill.
+        var conditions = new StopConditions(
+            [new ItemCountCondition(7, 20), new KillCountCondition(30)], StopMode.Any);
+
+        Assert.Empty(conditions.MobsDone(Progress(kills: 30, mobs: [(49, 30)])));
+    }
+
+    [Fact]
+    public void OnlyMobsWithACountOfTheirOwnAreCounted()
+    {
+        var conditions = new StopConditions(
+            [new MobKillCondition(49, "lemur", 3), new KillCountCondition(30)], StopMode.All);
+
+        Assert.Equal([49u], conditions.MobsCounted);
+    }
+
+    [Fact]
+    public void PickingARunBackUpLeavesNothingCountingAMobItNoLongerWants()
+    {
+        // What is left after a death drops the mobs already done, and a run
+        // that still went after them would be killing them for nothing: there
+        // is no target left to fill and no reason to stop.
+        var rest = new StopConditions(
+                [new MobKillCondition(49, "lemur", 3), new MobKillCondition(50, "mandragora", 3)],
+                StopMode.All)
+            .Remaining(Progress(mobs: [(49, 3)]));
+
+        Assert.Equal([50u], rest.MobsCounted);
+    }
+
+    [Fact]
+    public void ASetWithSomethingToReachSaysSo()
+    {
+        var conditions = new StopConditions(
+            [new KillCountCondition(30), new DeathCondition()], StopMode.Any);
+
+        Assert.True(conditions.Asking);
+    }
+
+    [Fact]
+    public void ASetOfNothingButSafetyIsAskingForNothing()
+    {
+        // What is left after a death can come to this: everything the run was
+        // told to reach was reached, and dying is what ended it. Starting again
+        // on that would be a run with no number to reach.
+        var conditions = new StopConditions(
+            [new DeathCondition(), new InventoryFullCondition()], StopMode.All);
+
+        Assert.False(conditions.Asking);
     }
 }

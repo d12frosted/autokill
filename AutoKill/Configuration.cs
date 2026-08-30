@@ -74,6 +74,18 @@ public sealed class Configuration : IPluginConfiguration
     public uint PreferredJob { get; set; }
 
     /// <summary>
+    /// How far above the class's own level a hunting log run will reach.
+    /// </summary>
+    /// <remarks>
+    /// The log is ordered by level and the class levels while the run goes, so
+    /// this is what decides how much of a rank is offered at a time. Zero means
+    /// nothing above the level you are, which stalls a rank that opens with an
+    /// entry a level or two up. Three is far enough to keep going and near
+    /// enough that the ground is still ordinary.
+    /// </remarks>
+    public int LogReach { get; set; } = 3;
+
+    /// <summary>
     /// The small progress window that floats beside the game while a run is
     /// going, with the bars and the two buttons worth pressing.
     /// </summary>

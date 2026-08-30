@@ -40,6 +40,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly RunHistory history;
 
     private MobIndex? index;
+    private HuntingLog? logbook;
 
     public Plugin()
     {
@@ -76,8 +77,8 @@ public sealed class Plugin : IDalamudPlugin
         var past = new PastRuns(history);
 
         mainWindow = new MainWindow(
-            () => index, farming, PlayerState, Textures, config, observations, history, artisan, hunts, fates, past,
-            Save);
+            () => index, farming, PlayerState, Textures, config, observations, history, artisan, hunts,
+            () => logbook, fates, past, Save);
         windows.AddWindow(mainWindow);
         windows.AddWindow(new RunOverlay(
             () => index, farming, PlayerState, config, Textures, past, () => mainWindow.IsOpen = true));
@@ -97,7 +98,12 @@ public sealed class Plugin : IDalamudPlugin
         {
             try
             {
-                index = MobIndex.Build(DataManager, Log);
+                var built = MobIndex.Build(DataManager, Log);
+
+                // The log needs somewhere to send a run, so it is built on top
+                // of the index rather than beside it.
+                logbook = new HuntingLog(DataManager, built, Log);
+                index = built;
             }
             catch (Exception ex)
             {

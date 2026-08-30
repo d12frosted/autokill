@@ -35,6 +35,7 @@ public sealed class MainWindow : Window
     private readonly RunHistory history;
     private readonly ArtisanLists artisan;
     private readonly HuntBills hunts;
+    private readonly Func<HuntingLog?> logbook;
     private readonly Fates fates;
     private readonly PastRuns past;
     private readonly Action saveConfig;
@@ -79,6 +80,7 @@ public sealed class MainWindow : Window
         RunHistory history,
         ArtisanLists artisan,
         HuntBills hunts,
+        Func<HuntingLog?> logbook,
         Fates fates,
         PastRuns past,
         Action saveConfig)
@@ -93,6 +95,7 @@ public sealed class MainWindow : Window
         this.history = history;
         this.artisan = artisan;
         this.hunts = hunts;
+        this.logbook = logbook;
         this.fates = fates;
         this.past = past;
         this.saveConfig = saveConfig;
@@ -249,6 +252,7 @@ public sealed class MainWindow : Window
         DrawMobTab(mobs);
         DrawDropTab(mobs);
         DrawHuntTab(mobs);
+        DrawLogTab();
         DrawHistoryTab(mobs);
         DrawLearnedTab(mobs);
         DrawSettingsTab();
@@ -403,6 +407,261 @@ public sealed class MainWindow : Window
         // The bill names one mob, and only that one counts towards it, so this
         // is the one flow that never takes a whole field.
         Plan(new FarmTarget(mob, area), carryItem: false);
+    }
+
+    /// <summary>
+    /// The hunting log: the rank each class is on, and what it still owes.
+    /// </summary>
+    /// <remarks>
+    /// The log is the game's own kill list, and unlike a hunt bill it names who
+    /// has to land the kill. So a run from here puts that class on rather than
+    /// picking whatever clears the field fastest, and a class with no gearset
+    /// to put on says so instead of offering a run that cannot count.
+    ///
+    /// Only the rank the client is on, because that is the only rank the game
+    /// lets anyone work on. Only the current class is open when the tab is
+    /// first drawn: twelve logs of ten entries is a wall, and the one being
+    /// worn is the one being levelled.
+    /// </remarks>
+    private void DrawLogTab()
+    {
+        using var tab = ImRaii.TabItem("Log");
+        if (!tab)
+            return;
+
+        if (logbook() is not { } book)
+        {
+            Style.Nothing("The hunting log turns up once the mob data has finished loading.");
+            return;
+        }
+
+        var pages = book.Pages();
+        if (pages.Count == 0)
+        {
+            Style.Nothing("No hunting log yet. It reads from the character, so it needs one logged in.");
+            return;
+        }
+
+        // Walked once for the whole tab rather than once per log, since a
+        // hundred gearset rows a frame is a hundred too many.
+        var kitted = farming.Jobs.Gearsets().Select(gearset => gearset.Job.ClassJobId).ToHashSet();
+        var worn = farming.Jobs.Current?.ClassJobId ?? 0;
+
+        using var child = ImRaii.Child("##log", new Vector2(-1, -1));
+        if (!child)
+            return;
+
+        // The ones that can actually be farmed first. Nine classes and a Grand
+        // Company is a long list to read past when three of them are yours.
+        foreach (var page in pages
+                     .OrderBy(page => Access(page, kitted) == LogAccess.Open ? 0 : 1)
+                     .ThenBy(page => page.Slot))
+        {
+            using var id = ImRaii.PushId(page.Slot);
+            DrawLogPage(book, page, kitted, worn);
+        }
+    }
+
+    /// <summary>Whether a log can be farmed, and what is in the way if not.</summary>
+    /// <remarks>
+    /// Two different walls, and which one it is matters: a class never picked
+    /// up is a trip to its guild, and a class with no gearset is a minute in
+    /// the character sheet. Both would otherwise read as the plugin simply not
+    /// offering to do anything.
+    /// </remarks>
+    private enum LogAccess
+    {
+        Open,
+        NotUnlocked,
+        NoGearset,
+    }
+
+    private static LogAccess Access(LogPage page, IReadOnlySet<uint> kitted) =>
+        !page.Unlocked ? LogAccess.NotUnlocked
+        : page.ClassJobId != 0 && !kitted.Contains(page.ClassJobId) ? LogAccess.NoGearset
+        : LogAccess.Open;
+
+    private static string? Shut(LogAccess access) => access switch
+    {
+        LogAccess.NotUnlocked => "not unlocked",
+        LogAccess.NoGearset => "no gearset",
+        _ => null,
+    };
+
+    private void DrawLogPage(
+        HuntingLog book, LogPage page, IReadOnlySet<uint> kitted, uint worn)
+    {
+        var access = Access(page, kitted);
+        var left = page.Lines.Count - page.Done;
+
+        // A class nobody has picked up has no level and no rank worth reading,
+        // so its header is the name and the reason and nothing else.
+        var title = access == LogAccess.NotUnlocked
+            ? page.Name
+            : page.ClassJobId == 0
+                ? $"{page.Name}, rank {page.Rank} of {page.Ranks}"
+                : $"{page.Name} Lv{page.Level}, rank {page.Rank} of {page.Ranks}";
+
+        var flags = access == LogAccess.Open && page.ClassJobId == worn
+            ? ImGuiTreeNodeFlags.DefaultOpen
+            : ImGuiTreeNodeFlags.None;
+
+        // A log that cannot be farmed is dimmed rather than hidden, since what
+        // it wants is still worth reading before going and unlocking it.
+        if (access != LogAccess.Open)
+            ImGui.PushStyleColor(ImGuiCol.Text, Style.Muted);
+
+        var shown = ImGui.CollapsingHeader($"{title}###log{page.Slot}", flags);
+
+        if (access != LogAccess.Open)
+            ImGui.PopStyleColor();
+
+        Style.Trailing(
+            Shut(access) ?? (left == 0 ? "rank done" : $"{page.Done}/{page.Lines.Count}"));
+
+        if (!shown)
+            return;
+
+        using var indent = ImRaii.PushIndent();
+
+        var wearable = access == LogAccess.Open;
+        switch (access)
+        {
+            case LogAccess.NotUnlocked:
+                Style.Muffled($"No {page.Name} yet. The log opens when the class does.");
+                break;
+
+            // The game offers no way to equip a bare class, so a log for one
+            // that has never been kitted out cannot be farmed at all. Said
+            // once, at the top, rather than against every entry underneath.
+            case LogAccess.NoGearset:
+                Style.Muffled($"No {page.Name} gearset, so nothing here can be run as one.");
+                break;
+        }
+
+        foreach (var line in page.Lines)
+        {
+            using var id = ImRaii.PushId((int)line.Entry.RowId);
+            DrawLogLine(book, page, line, wearable);
+        }
+
+        if (wearable && left > 0)
+        {
+            Style.Gap(2f);
+            var route = book.Route(page, config.LogReach);
+            if (route.Count == 0 && page.ClassJobId != 0)
+            {
+                Style.Muffled(
+                    $"Nothing left within {config.LogReach} levels of {page.Level}. "
+                    + "Level it a little, or reach further in settings.");
+            }
+            else if (route.Count == 0)
+            {
+                Style.Muffled("Nowhere recorded for what is left of this rank.");
+            }
+            else if (Style.Commit(
+                         $"Farm rank {page.Rank}",
+                         $"{route.Count} stop(s), each going after every mob of this rank standing in it."))
+            {
+                FarmLog(book, page, route);
+            }
+        }
+
+        Style.Gap(2f);
+    }
+
+    private void DrawLogLine(
+        HuntingLog book, LogPage page, LogLine line, bool wearable)
+    {
+        if (line.Entry.Done)
+        {
+            Style.Muffled(line.Names);
+            ImGui.SameLine();
+            ImGui.TextColored(Style.Good, "done");
+            return;
+        }
+
+        var level = book.LevelOf(line, page);
+
+        Style.Line(line.Names);
+        if (level is { } written)
+        {
+            ImGui.SameLine(0f, ImGui.GetStyle().ItemSpacing.X * 0.75f);
+            ImGui.TextColored(Style.Muted, $"Lv{written}");
+        }
+
+        Style.Trailing($"{line.Entry.Needed - line.Entry.Remaining}/{line.Entry.Needed}");
+
+        using var indent = ImRaii.PushIndent();
+
+        // One line each only when there is more than one, since a single mob
+        // has already been named and counted above.
+        if (line.Entry.Kills.Count > 1)
+        {
+            foreach (var kill in line.Entry.Kills)
+            {
+                Style.Muffled(kill.Name);
+                Style.Trailing($"{kill.Killed}/{kill.Needed}");
+            }
+        }
+
+        Style.Muffled(line.Zones);
+
+        if (!line.Reachable)
+        {
+            // The Grand Company logs send you into dungeons, which is not
+            // somewhere a run can go.
+            Style.Muffled("nowhere recorded in that zone");
+            return;
+        }
+
+        if (!wearable)
+            return;
+
+        // A Grand Company log names no class, so there is nothing pinned to be
+        // out of reach of: whatever suits the field goes.
+        var reach = page.ClassJobId == 0
+                    || HuntingLogPlan.WithinReach(level, page.Level, config.LogReach);
+        if (!reach)
+        {
+            Style.Muffled($"above {page.Level} + {config.LogReach}");
+            ImGui.SameLine();
+        }
+
+        // A Grand Company log belongs to no class, so there is no "as" to say.
+        var asClass = page.ClassJobId == 0 ? string.Empty : $", as {page.Name}";
+
+        if (Style.Quiet(
+                "farm this one",
+                reach
+                    ? $"Go after it now{asClass}."
+                    : $"Go anyway{asClass}, even though it is over your reach."))
+        {
+            FarmLog(book, page, book.Route(page, config.LogReach, line.Entry.RowId));
+        }
+    }
+
+    /// <summary>
+    /// Send a hunting log route off as a queue of stops.
+    /// </summary>
+    /// <remarks>
+    /// What each stop owes is asked again when that stop starts rather than
+    /// now, because the stops before it have been killing the same rank and one
+    /// of them may have finished it outright.
+    /// </remarks>
+    private void FarmLog(
+        HuntingLog book,
+        LogPage page,
+        IReadOnlyList<(FarmTarget Target, IReadOnlyList<HuntingLogKill> Kills)> route)
+    {
+        if (route.Count == 0)
+            return;
+
+        farming.StartMany(route.Select(stop =>
+        {
+            var mobs = stop.Kills.Select(kill => kill.BNpcNameId).ToList();
+            return new FarmLeg(stop.Target, () => book.Owing(page.Slot, mobs), page.ClassJobId);
+        }));
     }
 
     /// <summary>
@@ -702,6 +961,16 @@ public sealed class MainWindow : Window
                 $"{progress.Elapsed:hh\\:mm\\:ss} / {time.Limit:hh\\:mm\\:ss}");
         }
 
+        // The hunting log counts each mob on its own: one field usually holds
+        // several entries' worth of different mobs, and the total says nothing
+        // about which of them is still owed.
+        foreach (var mob in session.Conditions.Conditions.OfType<MobKillCondition>())
+            // Clamped: a field holds more than one of them, so a target can be
+            // overshot by whatever else was already swinging, and "8 / 3" reads
+            // as a fault rather than as done.
+            Style.Progress(
+                mob.Name, Math.Min(progress.KillsOf(mob.BNpcNameId), mob.Target), mob.Target);
+
         var itemTargets = session.Conditions.Conditions
             .OfType<ItemCountCondition>()
             .ToDictionary(c => c.ItemId, c => c.Target);
@@ -770,10 +1039,16 @@ public sealed class MainWindow : Window
         // Dying ends the run, but it should not cost the setup. What is left
         // is the same ask less what the run banked: kills made, items held and
         // time spent all stay made, held and spent.
-        if (session.Died && session.Outcome is { } outcome)
+        // Nothing to pick back up when the run got everything it asked for and
+        // died on the way out: what is left of it would ask for nothing at all.
+        if (session.Died && session.Outcome is { } outcome
+                         && session.Conditions.Remaining(outcome).Asking)
         {
+            // As the same class, since a hunting log counts the kill for one
+            // class and picking the run back up as something else would farm
+            // the same ground for nothing.
             if (Style.Row("pick it back up", "Start again, going for what the run still owed.")
-                && farming.Start(session.Target, session.Conditions.Remaining(outcome)))
+                && farming.Start(session.Target, session.Conditions.Remaining(outcome), session.As))
             {
                 resultDismissed = false;
                 return;
@@ -842,7 +1117,7 @@ public sealed class MainWindow : Window
         Style.Gap(2f);
         if (Style.Commit("apply", "The run chases these targets from here on."))
         {
-            session.Retarget(BuildConditions());
+            session.Retarget(BuildConditions(session.Conditions));
             adjusting = false;
         }
 
@@ -1096,6 +1371,23 @@ public sealed class MainWindow : Window
 
         Style.Gap();
         ImGui.Separator();
+        Style.Heading("the hunting log");
+
+        var reach = config.LogReach;
+        ImGui.SetNextItemWidth(Style.Px(220f));
+        if (ImGui.SliderInt("reach this far above the class", ref reach, 0, 10, "%d levels"))
+        {
+            config.LogReach = reach;
+            saveConfig();
+        }
+
+        Style.MuffledWrapped(
+            "The log is ordered by level and the class levels while it runs, so "
+            + "this decides how much of a rank is offered at once. None of it "
+            + "changes job: a log only counts for the class it belongs to.");
+
+        Style.Gap();
+        ImGui.Separator();
         Style.Heading("while it runs");
 
         var overlay = config.ShowOverlay;
@@ -1209,9 +1501,19 @@ public sealed class MainWindow : Window
 
     private void ClearPlan() => plannedTarget = null;
 
-    private StopConditions BuildConditions()
+    /// <param name="keeping">
+    /// The run's current targets, when this is an adjustment rather than a
+    /// fresh plan. Anything this form has no control for rides along untouched:
+    /// a hunting log run counts each mob on its own, and setting a kill count
+    /// on top of it should not quietly throw that away.
+    /// </param>
+    private StopConditions BuildConditions(StopConditions? keeping = null)
     {
         var conditions = new List<IStopCondition>();
+
+        if (keeping is not null)
+            conditions.AddRange(keeping.Conditions.OfType<MobKillCondition>());
+
         if (killTarget > 0)
             conditions.Add(new KillCountCondition(killTarget));
         if (minuteTarget > 0)
@@ -1702,7 +2004,7 @@ public sealed class MainWindow : Window
         var legs = wanted
             .Select(m => (Material: m, Field: mobs.FieldsDropping(m.ItemId).FirstOrDefault()))
             .Where(x => x.Field is not null)
-            .Select(x => new FarmLeg(x.Field!, x.Material.ItemId, x.Material.Required))
+            .Select(x => FarmController.Gathering(x.Field!, x.Material.ItemId, x.Material.Required))
             .GroupBy(leg => leg.Target.Area.TerritoryTypeId)
             .SelectMany(zone => zone)
             .ToList();

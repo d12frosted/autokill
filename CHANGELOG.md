@@ -7,6 +7,44 @@ reading the diff. Dates are when the tag went out.
 
 ### Added
 
+- **The hunting log.** A new Log tab, showing what every class and Grand
+  Company log still owes: the rank you are on, the ten entries in it, the mobs
+  each wants and how many are in. The counts are the game's own, so a rank
+  picks up wherever you left it. "Farm rank 2" goes and does the whole thing:
+  the entries are grouped into the fewest zones that hold them, one stop per
+  field, and each stop goes after every mob of that rank standing in it rather
+  than one at a time. A rank costs about five teleports that way instead of
+  ten. Single entries can be farmed on their own too.
+
+  Because a log only counts the kill for the class it belongs to, a run from
+  here puts that class on rather than picking whatever clears the field
+  fastest. Logs you cannot farm say which wall it is, dimmed and sorted below
+  the rest: a class you have never picked up reads "not unlocked", and one with
+  no gearset reads "no gearset", because a bare class cannot be equipped. The
+  Grand Company log is there too, the one you belong to, and its dungeon
+  entries say "nowhere recorded in that zone", which is the truth: a run cannot
+  go into Halatali.
+
+  How far above the class's own level it will reach is a setting, three levels
+  by default. The log is ordered by level and the class levels while it runs,
+  so what is offered opens up as it goes.
+
+  A run counting mobs separately goes after exactly the ones it still has a
+  count for. A field carrying five entries does not fill them up together, and
+  the two that come back fastest would otherwise keep the ground looking busy,
+  keep the circuit from ever judging a spot cleared, and leave the run standing
+  in one place killing what it already had enough of. The same rule catches a
+  mob a stop earlier in the list already finished, and one dropped from what a
+  run picked back up after a death still owes: either way it stands in the
+  field with no number behind it, and killing it would never end.
+
+- **Picking a run back up goes as the same class.** A run that dies is offered
+  again with what it still owed, and it used to come back as whatever the job
+  policy picked. A hunting log counts the kill for one class and nobody else,
+  so it now comes back as that one. It is also no longer offered at all when
+  everything asked for was reached and dying is merely what ended it, since
+  starting again on that is a run with no number to reach.
+
 - **Pause.** A running farm can be paused and resumed from the window. Paused,
   it lets go of everything: the route, the rotation, the target it was chasing.
   The clock a time limit runs against stops with it, so a run paused for ten

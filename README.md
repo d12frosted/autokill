@@ -56,6 +56,17 @@ those names a B rank, and if the mark is not up the run patrols its spawn points
 is. Targets that only appear inside a FATE say so, and can only be picked while that FATE
 is running, in which case it goes to where the FATE actually is.
 
+**Or work through the hunting log.** The Log tab shows each class's log and your Grand
+Company's: the rank you are on, its ten entries, the mobs each wants and how many are in.
+One button farms the whole rank. The entries are grouped into the fewest zones that hold
+them and each stop goes after every mob of that rank standing in the field, so a rank
+costs about five teleports rather than ten. A log only counts the kill for the class it
+belongs to, so a run from here puts that class on rather than picking whatever kills
+fastest. A log you cannot farm says which wall it is, dimmed under the ones you can: a
+class never picked up, or one with no gearset, since a bare class cannot be equipped.
+How far above the class's own level it reaches is yours to set, since the log is ordered
+by level and the class levels while it runs.
+
 ### The run
 
 **Farm an area, not a spot.** Mobs of one kind are spread over a field in several loose
@@ -111,7 +122,8 @@ hour, so which field is better for something is answerable from your own runs.
 
 `/autokill` opens the window. It shows one thing at a time:
 
-- **Browsing**: six tabs. By mob, By drop, Hunts, History, Learned and Settings.
+- **Browsing**: seven tabs. By mob, By drop, Hunts, Log, History, Learned and
+  Settings.
 - **Planning**: the area you chose, and what should end the run. A map button flags
   the area on the game map. Nothing starts until you press Start.
 - **Running**: a compact overlay beside the game with the status, the bars and the
@@ -137,6 +149,7 @@ hour, so which field is better for something is answerable from your own runs.
 | teleport back when a run ends | back to the zone the run set off from, or to your home point, when it ends on its own |
 | record runs to a trace file | writes what each run did, for working out afterwards where the time went |
 | going as the wrong job | change job automatically, refuse to start and say why, or go anyway |
+| reach this far above the class | how far above a class's own level the hunting log will send it. Nothing here changes job: a log only counts for the class it belongs to |
 | go as | which job to reach for when changing, out of the ones you have a gearset for |
 
 ### Learned
@@ -170,6 +183,10 @@ content, but every expansion has something.
 
 You do not need the drop data to farm an item: item counts are read from your inventory,
 so "until I have 30 of these" works for anything at all, as long as you pick the mob.
+
+The hunting log is the exception to all of this. Every mob on all nine class logs, 450
+entries of them, stands somewhere the data records inside the zone the log itself names.
+The Grand Company logs lose 23 entries out of 90, every one of them a dungeon.
 
 ## Installing
 

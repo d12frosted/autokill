@@ -13,7 +13,18 @@ public class RemainingTests
             50,
             InventoryFull: false,
             Died: true,
-            gained.ToDictionary(g => g.Item, g => g.Count));
+            gained.ToDictionary(g => g.Item, g => g.Count),
+            new Dictionary<uint, int>());
+
+    private static FarmProgress AfterKilling(params (uint Mob, int Count)[] killed) =>
+        new(
+            killed.Sum(k => k.Count),
+            TimeSpan.Zero,
+            50,
+            InventoryFull: false,
+            Died: true,
+            new Dictionary<uint, int>(),
+            killed.ToDictionary(k => k.Mob, k => k.Count));
 
     [Fact]
     public void KillsAlreadyMadeComeOffTheTarget()
@@ -90,5 +101,30 @@ public class RemainingTests
             .Remaining(After());
 
         Assert.Equal(StopMode.All, rest.Mode);
+    }
+
+    [Fact]
+    public void KillsOfOneMobComeOffThatMobsTarget()
+    {
+        // Picking a hunting log run back up asks for what that entry still
+        // owes, not for the whole entry again.
+        var rest = new StopConditions(
+                [new MobKillCondition(49, "wharf rat", 3), new MobKillCondition(50, "aurelia", 3)],
+                StopMode.All)
+            .Remaining(AfterKilling((49, 2)));
+
+        Assert.Equal(2, rest.Conditions.Count);
+        Assert.Equal(1, Assert.IsType<MobKillCondition>(rest.Conditions[0]).Target);
+        Assert.Equal(3, Assert.IsType<MobKillCondition>(rest.Conditions[1]).Target);
+    }
+
+    [Fact]
+    public void AMobAlreadyKilledEnoughOfDropsOutAltogether()
+    {
+        var rest = new StopConditions(
+                [new MobKillCondition(49, "wharf rat", 3)], StopMode.All)
+            .Remaining(AfterKilling((49, 3)));
+
+        Assert.Empty(rest.Conditions);
     }
 }

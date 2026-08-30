@@ -7,12 +7,20 @@ using Dalamud.Plugin.Services;
 namespace AutoKill.Farming;
 
 /// <summary>
-/// One stop of a run over a crafting list: a field, the material it is for,
-/// and how much of it the list wants in total. How much is still missing is
-/// worked out when the leg starts, not when it is queued, because the stops
-/// before it change what the bags hold.
+/// One stop of a run over a list: a field, and what would finish it.
 /// </summary>
-public readonly record struct FarmLeg(FarmTarget Target, uint ItemId, int Required);
+/// <param name="Goal">
+/// Worked out when the leg starts rather than when it is queued, and nothing
+/// when there is no longer anything to do here. A crafting list's stops change
+/// what the bags hold, and a hunting log's change what the log still owes, so
+/// a stop that has been covered by the ones before it is skipped rather than
+/// farmed for nothing.
+/// </param>
+/// <param name="As">
+/// The class this leg has to be run as, or zero for whatever suits the field.
+/// The hunting log only counts a kill for the class whose log it is.
+/// </param>
+public readonly record struct FarmLeg(FarmTarget Target, Func<StopConditions?> Goal, uint As = 0);
 
 /// <summary>Owns the running session and ticks it.</summary>
 public sealed class FarmController : IDisposable
@@ -121,18 +129,18 @@ public sealed class FarmController : IDisposable
     /// between the last frame and the press. Checked again anyway, since the one
     /// place it must not be wrong is the moment it acts.
     /// </remarks>
-    public bool Start(FarmTarget target, StopConditions conditions)
+    public bool Start(FarmTarget target, StopConditions conditions, uint asClass = 0)
     {
         legs.Clear();
         homecoming = null;
         homeTerritory = clientState.TerritoryType;
-        return StartCore(target, conditions);
+        return StartCore(target, conditions, asClass);
     }
 
     /// <summary>
     /// Farm a whole list of stops, one after another. Each leg's goal is
-    /// worked out when it starts, from what the bags hold by then, so a stop
-    /// that turns out to be covered is skipped rather than farmed for nothing.
+    /// worked out when it starts, so a stop that turns out to be covered by
+    /// the ones before it is skipped rather than farmed for nothing.
     /// </summary>
     public void StartMany(IEnumerable<FarmLeg> list)
     {
@@ -145,9 +153,28 @@ public sealed class FarmController : IDisposable
         StartNextLeg();
     }
 
-    private bool StartCore(FarmTarget target, StopConditions conditions)
+    /// <summary>
+    /// One stop of a crafting list: this field, for this material, until the
+    /// bags hold what the list wants.
+    /// </summary>
+    public static FarmLeg Gathering(FarmTarget target, uint itemId, int required) =>
+        new(target, () =>
+        {
+            var missing = CraftingLists.StillNeeded(required, Bags.CountOf(itemId));
+            return missing == 0
+                ? null
+                : new StopConditions(
+                    [
+                        new ItemCountCondition(itemId, missing),
+                        new DeathCondition(),
+                        new InventoryFullCondition(),
+                    ],
+                    StopMode.Any);
+        });
+
+    private bool StartCore(FarmTarget target, StopConditions conditions, uint asClass = 0)
     {
-        var job = jobs.Plan(target.Area.Level);
+        var job = asClass == 0 ? jobs.Plan(target.Area.Level) : jobs.PlanAs(target.Area.Level, asClass);
         if (job.Says is { } says)
             notifier.Info(says);
 
@@ -165,7 +192,10 @@ public sealed class FarmController : IDisposable
 
         Halt("replaced");
         Current = new FarmSession(
-            target, conditions, navmesh, wrath, clientState, objects, targets, data, condition, notifier, itemName, config, newRecorder(), observations, history, log);
+            target, conditions, navmesh, wrath, clientState, objects, targets, data, condition, notifier, itemName, config, newRecorder(), observations, history, log)
+        {
+            As = asClass,
+        };
         log.Information(
             $"Farming {target.Name} in {target.Area.ZoneName}, {target.Area.Spots.Count} spot(s).");
         notifier.Info($"farming {target.Name} in {target.Area.ZoneName}.");
@@ -176,21 +206,12 @@ public sealed class FarmController : IDisposable
     {
         while (legs.TryDequeue(out var leg))
         {
-            var missing = CraftingLists.StillNeeded(leg.Required, Bags.CountOf(leg.ItemId));
-            if (missing == 0)
+            if (leg.Goal() is not { } conditions)
                 continue;
-
-            var conditions = new StopConditions(
-                [
-                    new ItemCountCondition(leg.ItemId, missing),
-                    new DeathCondition(),
-                    new InventoryFullCondition(),
-                ],
-                StopMode.Any);
 
             // A stop the job checks refuse has said why already; the stops
             // after it are still worth trying.
-            if (!StartCore(leg.Target, conditions))
+            if (!StartCore(leg.Target, conditions, leg.As))
                 continue;
 
             if (legs.Count > 0)
@@ -299,9 +320,19 @@ public sealed class FarmController : IDisposable
         done.ReleaseRotation();
     }
 
+    /// <summary>
+    /// Whether a stop finished because it got what it came for, rather than
+    /// because something ended it.
+    /// </summary>
+    /// <remarks>
+    /// The goal itself rather than any particular kind of target, since a
+    /// crafting list stop ends on an item count and a hunting log stop ends on
+    /// a kill count per mob. Dying and full bags are ruled out first: both
+    /// would end every stop after this one the same way.
+    /// </remarks>
     private static bool LegDone(FarmSession session) =>
-        session.Outcome is { } outcome
-        && session.Conditions.Conditions.OfType<ItemCountCondition>().Any(c => c.IsMet(outcome));
+        session.Outcome is { Died: false, InventoryFull: false } outcome
+        && session.Conditions.ShouldStop(outcome);
 
     /// <summary>
     /// Where back is: an aetheryte in the zone the run set off from, or the

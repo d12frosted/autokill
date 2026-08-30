@@ -319,4 +319,80 @@ public class JobFitnessTests
             "Paladin is level 42, and this is Lv85-90. Switching to Samurai first.",
             plan.Says);
     }
+
+    // The hunting log names who has to land the kill, so the class stops being
+    // a preference and becomes the requirement.
+
+    [Fact]
+    public void AlreadyInTheClassTheLogNamesIsNothingToDo()
+    {
+        var plan = JobFitness.PlanAs(
+            Tank(42), Level(41, 42), Wardrobe, Paladin, "Paladin", JobPolicy.Switch);
+
+        Assert.False(plan.Blocked);
+        Assert.Null(plan.Change);
+        Assert.Null(plan.Says);
+    }
+
+    [Fact]
+    public void AnotherClassMeansPuttingOnTheGearsetForTheOneNamed()
+    {
+        var plan = JobFitness.PlanAs(
+            Melee(90), Level(41, 42), Wardrobe, Paladin, "Paladin", JobPolicy.Switch);
+
+        Assert.Equal(1, plan.Change!.GearsetId);
+        Assert.Equal("The log is Paladin's. Switching to it first.", plan.Says);
+    }
+
+    [Fact]
+    public void NoGearsetForTheClassBlocksTheRun()
+    {
+        // The game offers no way to equip a bare class, so a log for a class
+        // nobody has kitted out cannot be farmed at all.
+        var plan = JobFitness.PlanAs(
+            Melee(90), Level(1, 5), Wardrobe, WhiteMage, "White Mage", JobPolicy.Switch);
+
+        Assert.True(plan.Blocked);
+        Assert.Null(plan.Change);
+        Assert.Equal(JobProblem.NoGearset, plan.Problem);
+        Assert.Equal("You have no White Mage gearset to put on.", plan.Says);
+    }
+
+    [Fact]
+    public void GroundAboveTheClassIsSaidRatherThanSwappedAwayFrom()
+    {
+        // Switching is exactly what must not happen here, so the standing
+        // instruction narrows to going anyway or refusing.
+        var plan = JobFitness.PlanAs(
+            Tank(42), Level(50, 55), Wardrobe, Paladin, "Paladin", JobPolicy.Switch);
+
+        Assert.False(plan.Blocked);
+        Assert.Null(plan.Change);
+        Assert.Equal("Paladin is level 42, and this is Lv50-55. Going anyway.", plan.Says);
+    }
+
+    [Fact]
+    public void RefusingStillRefusesWhenTheClassIsTooLow()
+    {
+        var plan = JobFitness.PlanAs(
+            Tank(42), Level(50, 55), Wardrobe, Paladin, "Paladin", JobPolicy.Refuse);
+
+        Assert.True(plan.Blocked);
+        Assert.Equal("Paladin is level 42, and this is Lv50-55.", plan.Says);
+    }
+
+    [Fact]
+    public void TheHighestGearsetForTheClassIsTheOneWorn()
+    {
+        IReadOnlyList<JobSwitch> two =
+        [
+            new JobSwitch(3, "PLD old", new JobStanding(Paladin, "Paladin", JobRole.Tank, 42)),
+            new JobSwitch(4, "PLD", new JobStanding(Paladin, "Paladin", JobRole.Tank, 42)),
+        ];
+
+        var plan = JobFitness.PlanAs(
+            Melee(90), Level(41, 42), two, Paladin, "Paladin", JobPolicy.Switch);
+
+        Assert.Equal(3, plan.Change!.GearsetId);
+    }
 }
