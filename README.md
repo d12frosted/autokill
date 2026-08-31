@@ -167,7 +167,11 @@ a patch.
 - **vnavmesh** for movement. Nothing works without it, and the window says so.
 - **A rotation plugin** for fighting. Wrath Combo is wired up. Without one the loop still
   travels and targets, and leaves the fighting to you.
-- An attuned aetheryte in the zone you want to farm.
+- An attuned aetheryte in the zone you want to farm, or in the town its aethernet leads
+  out of.
+- **Lifestream**, only for the Dravanian Hinterlands. It is the one zone in the game with
+  no aetheryte of its own: you teleport to Idyllshire and take the aethernet out to one
+  of its gates, and Lifestream is what rides the aethernet. Nothing else needs it.
 - **Artisan**, only if you want to farm against a crafting list. Its lists are read from
   its config file, so it does not have to be loaded.
 

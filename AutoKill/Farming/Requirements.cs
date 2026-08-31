@@ -30,9 +30,13 @@ public sealed record Requirement(string Name, RequirementState State, string Det
 /// and unloaded, and the two want different advice: one is "enable it", the
 /// other is "install it".
 /// </remarks>
-public sealed class Requirements(IDalamudPluginInterface plugin, NavmeshIpc navmesh, WrathIpc wrath)
+public sealed class Requirements(
+    IDalamudPluginInterface plugin,
+    NavmeshIpc navmesh,
+    WrathIpc wrath,
+    LifestreamIpc lifestream)
 {
-    public IReadOnlyList<Requirement> All() => [Navmesh(), Wrath()];
+    public IReadOnlyList<Requirement> All() => [Navmesh(), Wrath(), Lifestream()];
 
     /// <summary>The reason a run cannot start, if there is one.</summary>
     public string? Blocker =>
@@ -92,6 +96,28 @@ public sealed class Requirements(IDalamudPluginInterface plugin, NavmeshIpc navm
         return wrath.Rotating
             ? new Requirement(name, RequirementState.Good, "auto-rotation already on, so it will be left alone")
             : new Requirement(name, RequirementState.Good, "ready, and it will set this job up if needed");
+    }
+
+    private Requirement Lifestream()
+    {
+        const string name = "Lifestream";
+
+        // One zone in the game has no aetheryte standing in it, and the
+        // aethernet hop that gets into it is the only thing this is for. Worth
+        // naming rather than leaving as a run that stops for no visible reason
+        // in the one place it cannot reach.
+        const string only = "so the Dravanian Hinterlands cannot be reached";
+
+        if (Find(name) is not { } installed)
+            return new Requirement(name, RequirementState.Optional, $"not installed, {only}");
+
+        if (!installed.IsLoaded)
+            return new Requirement(name, RequirementState.Optional, $"installed but not enabled, {only}");
+
+        if (!lifestream.Responding)
+            return new Requirement(name, RequirementState.Optional, $"not answering, {only}");
+
+        return new Requirement(name, RequirementState.Good, "ready, for the aethernet hop into the Hinterlands");
     }
 
     private IExposedPlugin? Find(string internalName) =>

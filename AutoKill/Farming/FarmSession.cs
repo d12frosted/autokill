@@ -16,6 +16,10 @@ public enum FarmPhase
 {
     Idle,
     Teleporting,
+
+    /// <summary>Out of the town the teleport landed in and into the zone itself.</summary>
+    Crossing,
+
     Travelling,
     Hunting,
     Paused,
@@ -103,6 +107,15 @@ public sealed class FarmSession
     private static readonly TimeSpan RejectionInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan TeleportCooldown = TimeSpan.FromSeconds(10);
 
+    // How long the aethernet may keep landing nowhere before the zone is
+    // written off. Room for three or four asks, each of which is a menu, a
+    // click and a loading screen.
+    private static readonly TimeSpan CrossingPatience = TimeSpan.FromSeconds(45);
+
+    // Wider than one hop takes to play out, so an ask is not put over the top
+    // of the one already running.
+    private static readonly TimeSpan CrossingRetry = TimeSpan.FromSeconds(10);
+
     // How long a chosen quarry may show no sign of getting nearer or of dying
     // before the run stops believing in it. Long enough to cover summoning a
     // mount, which is a few seconds of standing still on the way to something.
@@ -131,6 +144,7 @@ public sealed class FarmSession
     private StopConditions conditions;
     private readonly NavmeshIpc navmesh;
     private readonly WrathIpc wrath;
+    private readonly LifestreamIpc lifestream;
     private readonly IClientState clientState;
     private readonly IObjectTable objects;
     private readonly ITargetManager targets;
@@ -178,6 +192,12 @@ public sealed class FarmSession
     private DateTime lastMountAction = DateTime.MinValue;
     private bool flagged;
     private DateTime lastTeleport = DateTime.MinValue;
+
+    // The way into the zone, resolved once the run is under way rather than at
+    // the start: attunement is read off the game, and the character has to be
+    // in the world for it to be there to read.
+    private ZoneRoute? route;
+    private Crossing? crossing;
     private Vector3? resolvedSpot;
     private int spotIndex;
     private DateTime? emptySince;
@@ -218,6 +238,7 @@ public sealed class FarmSession
         StopConditions conditions,
         NavmeshIpc navmesh,
         WrathIpc wrath,
+        LifestreamIpc lifestream,
         IClientState clientState,
         IObjectTable objects,
         ITargetManager targets,
@@ -237,6 +258,7 @@ public sealed class FarmSession
         this.conditions = conditions;
         this.navmesh = navmesh;
         this.wrath = wrath;
+        this.lifestream = lifestream;
         this.clientState = clientState;
         this.objects = objects;
         this.targets = targets;
@@ -392,6 +414,9 @@ public sealed class FarmSession
         {
             case FarmPhase.Teleporting:
                 TickTeleport(player);
+                break;
+            case FarmPhase.Crossing:
+                TickCross(player);
                 break;
             case FarmPhase.Travelling:
                 TickTravel(player);
@@ -816,6 +841,17 @@ public sealed class FarmSession
             return;
         }
 
+        if (Way() is not { } way)
+            return;
+
+        // Landed where the teleport could take us, which for a zone with no
+        // crystal of its own is the town next door rather than the field.
+        if (clientState.TerritoryType == way.TerritoryTypeId)
+        {
+            Phase = FarmPhase.Crossing;
+            return;
+        }
+
         if (clientState.IsPvP || player.IsCasting)
         {
             Status = "waiting to cast teleport";
@@ -828,17 +864,99 @@ public sealed class FarmSession
             return;
         }
 
-        var aetheryte = Aetherytes.AttunedIn(data, area.TerritoryTypeId);
-        if (aetheryte is not { } id)
+        lastTeleport = DateTime.UtcNow;
+        Status = $"teleporting to {area.ZoneName}";
+        if (!Aetherytes.Teleport(way.AetheryteId))
+            log.Warning($"Teleport to aetheryte {way.AetheryteId} was refused.");
+    }
+
+    /// <summary>
+    /// The way into the zone, worked out once and held. Ends the run when there
+    /// is no way, which is the answer for a zone the player has never attuned
+    /// to.
+    /// </summary>
+    private ZoneRoute? Way()
+    {
+        if (route is { } known)
+            return known;
+
+        if (Aetherytes.RouteTo(data, area.TerritoryTypeId) is not { } found)
         {
-            Finish($"no attuned aetheryte in {area.ZoneName}");
+            Finish($"no attuned aetheryte for {area.ZoneName}");
+            return null;
+        }
+
+        // Said before a teleport rather than after one, so nobody pays for the
+        // trip to Idyllshire only to be told the rest of the way is shut.
+        if (found.Crosses && !lifestream.Responding)
+        {
+            Finish($"needs Lifestream to take the aethernet into {area.ZoneName}");
+            return null;
+        }
+
+        route = found;
+        return found;
+    }
+
+    /// <summary>
+    /// The aethernet hop from the town the teleport landed in out into the zone
+    /// itself.
+    /// </summary>
+    private void TickCross(IPlayerCharacter player)
+    {
+        if (clientState.TerritoryType == area.TerritoryTypeId)
+        {
+            travelWatch.SetOff();
+            Phase = FarmPhase.Travelling;
             return;
         }
 
-        lastTeleport = DateTime.UtcNow;
-        Status = $"teleporting to {area.ZoneName}";
-        if (!Aetherytes.Teleport(id))
-            log.Warning($"Teleport to aetheryte {id} was refused.");
+        // Somewhere else entirely: a death, or the player teleporting off
+        // mid-hop. The way back into this is the teleport.
+        if (route is not { } way || clientState.TerritoryType != way.TerritoryTypeId)
+        {
+            crossing = null;
+            Phase = FarmPhase.Teleporting;
+            return;
+        }
+
+        // Checked here as well as before the teleport, because this phase asks
+        // Lifestream something every frame and a plugin unloaded mid-run would
+        // otherwise be a warning per frame for the whole of the patience.
+        if (!lifestream.Responding)
+        {
+            Finish($"Lifestream stopped answering, so {area.ZoneName} is out of reach");
+            return;
+        }
+
+        crossing ??= new Crossing(way.Gates, CrossingPatience, CrossingRetry);
+
+        var busy = player.IsDead
+            || player.IsCasting
+            || condition[ConditionFlag.BetweenAreas]
+            || condition[ConditionFlag.BetweenAreas51]
+            || lifestream.Busy;
+
+        switch (crossing.Check(busy, DateTime.UtcNow))
+        {
+            case CrossingStep.Wait:
+                Status = $"waiting to take the aethernet into {area.ZoneName}";
+                break;
+
+            case CrossingStep.Go:
+                Status = $"taking the aethernet into {area.ZoneName}";
+                if (!lifestream.AethernetTeleport(crossing.Gate))
+                    log.Warning($"Lifestream refused the aethernet hop to shard {crossing.Gate}.");
+                break;
+
+            // Named the likeliest fix rather than just the failure. The hop is
+            // a crystal being interacted with, so it wants the character
+            // standing at one, which after a teleport it is and after a walk
+            // across town it is not.
+            case CrossingStep.GiveUp:
+                Finish($"could not take the aethernet into {area.ZoneName}, try again from the aetheryte");
+                break;
+        }
     }
 
     private void TickTravel(IPlayerCharacter player)
