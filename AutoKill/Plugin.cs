@@ -67,10 +67,12 @@ public sealed class Plugin : IDalamudPlugin
             Chime = config.FinishSound,
         };
         wrath = new WrathIpc(PluginInterface, Log);
-        var requirements = new Requirements(PluginInterface, navmesh, wrath);
+        var lifestream = new LifestreamIpc(PluginInterface, Log);
+        var requirements = new Requirements(PluginInterface, navmesh, wrath, lifestream);
         var jobs = new Jobs(Objects, DataManager, Condition, config, Log);
         farming = new FarmController(
-            Framework, navmesh, wrath, ClientState, Objects, Targets, DataManager, Condition, notifier, requirements,
+            Framework, navmesh, wrath, lifestream, ClientState, Objects, Targets, DataManager, Condition, notifier,
+            requirements,
             jobs, itemId => index?.ItemName(itemId) ?? $"item {itemId}", config, NewRecorder, observations, history, Log);
 
         // What past runs over a piece of ground came to, shared by the window

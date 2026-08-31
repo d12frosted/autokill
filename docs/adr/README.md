@@ -24,3 +24,4 @@ Status values: `Proposed`, `Accepted`, `Superseded by NNNN`, `Rejected`.
 | [0013](0013-a-run-goes-after-a-set-of-mobs.md) | A run goes after a set of mobs | Accepted |
 | [0014](0014-check-the-job-before-the-teleport.md) | Check the job before the teleport | Accepted |
 | [0015](0015-the-hunting-log-is-a-rank-at-a-time.md) | The hunting log is a rank at a time | Accepted |
+| [0016](0016-one-zone-is-reached-over-the-aethernet.md) | One zone is reached over the aethernet | Accepted |

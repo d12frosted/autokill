@@ -163,6 +163,19 @@ reading the diff. Dates are when the tag went out.
   this worth twenty minutes" is answerable while deciding rather than twenty
   minutes later.
 
+- **The Dravanian Hinterlands can be farmed.** It is the one zone in the game
+  with no aetheryte standing in it, so every run there used to stop before it
+  started on "no attuned aetheryte in The Dravanian Hinterlands". It now goes
+  the way the game intends: teleport to Idyllshire, take the aethernet out to
+  one of its gates, and carry on. The gates are shards recorded as standing in
+  the Hinterlands rather than in the town, so the hop is the zone transition.
+
+  The hop needs Lifestream, which is optional in the way a rotation plugin is:
+  it is the only thing it is used for, nothing else changes without it, and it
+  is listed by name in the window alongside vnavmesh and Wrath. A run that
+  needs it and cannot find it says so before paying for the teleport, rather
+  than stranding you in Idyllshire.
+
 ### Changed
 
 - **The window wears the family signature.** AutoKill now dresses like its

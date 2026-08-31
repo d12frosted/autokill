@@ -41,6 +41,7 @@ public sealed class FarmController : IDisposable
     private readonly IFramework framework;
     private readonly NavmeshIpc navmesh;
     private readonly WrathIpc wrath;
+    private readonly LifestreamIpc lifestream;
     private readonly IClientState clientState;
     private readonly IObjectTable objects;
     private readonly ITargetManager targets;
@@ -59,6 +60,7 @@ public sealed class FarmController : IDisposable
         IFramework framework,
         NavmeshIpc navmesh,
         WrathIpc wrath,
+        LifestreamIpc lifestream,
         IClientState clientState,
         IObjectTable objects,
         ITargetManager targets,
@@ -77,6 +79,7 @@ public sealed class FarmController : IDisposable
         this.framework = framework;
         this.navmesh = navmesh;
         this.wrath = wrath;
+        this.lifestream = lifestream;
         this.clientState = clientState;
         this.objects = objects;
         this.targets = targets;
@@ -192,7 +195,7 @@ public sealed class FarmController : IDisposable
 
         Halt("replaced");
         Current = new FarmSession(
-            target, conditions, navmesh, wrath, clientState, objects, targets, data, condition, notifier, itemName, config, newRecorder(), observations, history, log)
+            target, conditions, navmesh, wrath, lifestream, clientState, objects, targets, data, condition, notifier, itemName, config, newRecorder(), observations, history, log)
         {
             As = asClass,
         };
