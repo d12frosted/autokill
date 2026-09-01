@@ -194,12 +194,34 @@ reading the diff. Dates are when the tag went out.
   rotation until the fighting is over, then releases it. Travelling stops
   immediately either way.
 
+- **A run drives Wrath even when it was already running.** AutoKill used to
+  leave a running auto-rotation completely alone, which was polite and left the
+  run unable to say what it should attack: the settings that decide that are the
+  ones it was refusing to touch. It now takes control for every run. Everything
+  it sets is set under a Wrath lease, which is Wrath's own way of lending a
+  plugin control, so your settings are handed back when the run ends, and
+  auto-rotation you switched on yourself is still on afterwards. A job with
+  nothing enabled in auto-mode is now set up for you instead of being reported
+  as something to go and fix.
+
 - **Done lands somewhere useful.** Finishing a run picked off a crafting list
   used to drop you back on that material's field list, which is the one screen
   the list never wants next. Done now lands on the list itself, counts fresh,
   with the next thing to farm in view.
 
 ### Fixed
+
+- **It stops picking fights it was not sent for.** A run used to attack whatever
+  it walked past on the way to its next target: mobs that were not on its list,
+  had no interest in it, and only made the trip longer and more dangerous. That
+  was Wrath choosing its own target rather than AutoKill choosing badly. A
+  target is only handed over once the quarry is close enough to fight, and in
+  the gap between one kill and reaching the next, Wrath fell back to whatever
+  target mode your settings hold. "Nearest", the usual one, specifically prefers
+  enemies that are not already fighting you, which is every harmless thing on
+  the path. Target selection is now pinned to manual for the length of a run, so
+  nothing is attacked but the mob the run picked. It shows up worst on the early
+  hunting log ranks, which are walked rather than flown.
 
 - **A crafting list that reads as empty says so, and can be unstuck.** A list
   with nothing on it used to report "nothing a mob drops", word for word what a

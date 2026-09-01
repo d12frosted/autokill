@@ -15,7 +15,7 @@ Status values: `Proposed`, `Accepted`, `Superseded by NNNN`, `Rejected`.
 | [0004](0004-farm-areas-not-spots.md) | Farm areas, not spots | Accepted |
 | [0005](0005-composable-stop-conditions.md) | Composable stop conditions | Accepted |
 | [0006](0006-a-ticked-state-machine.md) | A ticked state machine | Accepted |
-| [0007](0007-never-take-over-a-running-rotation.md) | Never take over a running rotation | Accepted |
+| [0007](0007-never-take-over-a-running-rotation.md) | Never take over a running rotation | Superseded by 0017 |
 | [0008](0008-learn-from-what-was-observed.md) | Learn from what was observed | Accepted |
 | [0009](0009-core-split-for-testing.md) | A core library that never sees the game | Accepted |
 | [0010](0010-installing-as-a-dev-plugin.md) | Installing as a dev plugin | Accepted |
@@ -25,3 +25,4 @@ Status values: `Proposed`, `Accepted`, `Superseded by NNNN`, `Rejected`.
 | [0014](0014-check-the-job-before-the-teleport.md) | Check the job before the teleport | Accepted |
 | [0015](0015-the-hunting-log-is-a-rank-at-a-time.md) | The hunting log is a rank at a time | Accepted |
 | [0016](0016-one-zone-is-reached-over-the-aethernet.md) | One zone is reached over the aethernet | Accepted |
+| [0017](0017-a-run-drives-the-rotation.md) | A run drives the rotation | Accepted |

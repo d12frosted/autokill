@@ -6,14 +6,16 @@ namespace AutoKill.IPC;
 
 /// <summary>Fighting, delegated to Wrath Combo.</summary>
 /// <remarks>
-/// Wrath is left alone if auto-rotation is already running. Somebody who plays
-/// with it on has their own settings, and quietly reaching in to change them and
-/// then switching it off at the end of a run is not a favour.
+/// A lease is taken for every run, whether or not a rotation was already
+/// running. A lease is Wrath's own mechanism for lending a plugin control:
+/// everything set under one is put back when the lease ends, so nothing here is
+/// a lasting change to somebody's configuration. That is what makes it fair to
+/// set up a job that was never configured for auto-rotation, and to pin the
+/// target mode for the length of a run.
 ///
-/// Otherwise a lease is taken, which is Wrath's own mechanism for lending a
-/// plugin control: everything set under a lease is put back when the lease ends,
-/// so nothing here is a lasting change to somebody's configuration. That is what
-/// makes it fair to set up a job that was never configured for auto-rotation.
+/// Auto-rotation is only switched off at the end if this plugin was the one that
+/// switched it on. Handing somebody's own rotation back off is the one thing a
+/// lease does not cover.
 ///
 /// Every set call answers with a result rather than throwing, and a refusal is
 /// ordinary: the lease can be invalid, blacklisted, or the player simply not
@@ -30,9 +32,13 @@ public sealed class WrathIpc : IDisposable
     // Wrath's AutoRotationConfigOption. These are assigned numbers rather than
     // positions, so they stay put as the list grows.
     private const int InCombatOnly = 0;
+    private const int DpsRotationMode = 1;
     private const int OnlyAttackInCombat = 13;
     private const int DpsAlwaysHardTarget = 19;
     private const int HealerAlwaysHardTarget = 20;
+
+    // Wrath's DPSRotationMode. Manual is the one that picks nothing of its own.
+    private const int Manual = 0;
 
     // Wrath's CancellationReason.
     private const int UserRevokedIt = 0;
@@ -63,6 +69,7 @@ public sealed class WrathIpc : IDisposable
 
     private Guid? lease;
     private bool weTurnedItOn;
+    private bool configured;
     private bool surrendered;
     private DateTime lastAttempt = DateTime.MinValue;
 
@@ -127,35 +134,43 @@ public sealed class WrathIpc : IDisposable
     }
 
     /// <summary>
-    /// Make sure a rotation is running, taking control only if one is not.
+    /// Make sure a rotation is running and pointed at what the run targeted.
     /// </summary>
+    /// <remarks>
+    /// Called on every tick of a fight, so the ordinary answer is the first one:
+    /// a lease in hand, settings applied, something swinging.
+    /// </remarks>
     public bool Start()
     {
-        if (Rotating)
-        {
-            // Someone is already driving. Leave every setting exactly as found.
-            return true;
-        }
-
         // The player took control back by hand. Asking again every few seconds
-        // would be arguing with them.
+        // would be arguing with them, so whatever they are running is what the
+        // run gets.
         if (surrendered)
-            return false;
+            return Rotating;
+
+        if (lease is not null && configured && Rotating)
+            return true;
 
         if (DateTime.UtcNow - lastAttempt < RetryEvery)
-            return false;
+            return Rotating;
 
         lastAttempt = DateTime.UtcNow;
 
         if (Lease() is null)
-            return false;
+            return Rotating;
 
-        if (!Set(id => setAutoRotationState.InvokeFunc(id, true), "enable auto-rotation"))
-            return false;
+        // Only when it was off, because the flag this sets is what decides
+        // whether the end of the run switches it back off, and switching off
+        // somebody else's rotation is the one thing the lease does not undo.
+        if (!Rotating)
+        {
+            if (!Set(id => setAutoRotationState.InvokeFunc(id, true), "enable auto-rotation"))
+                return false;
 
-        weTurnedItOn = true;
-        running = true;
-        runningAsOf = DateTime.UtcNow;
+            weTurnedItOn = true;
+            running = true;
+            runningAsOf = DateTime.UtcNow;
+        }
 
         // Sets up a job that was never configured for auto-rotation, keeping
         // whatever the player already chose where they chose anything. It is
@@ -168,13 +183,22 @@ public sealed class WrathIpc : IDisposable
         }
 
         // The first two otherwise wait for a fight to have started already,
-        // which is exactly what nothing else here is going to do. The other two
-        // keep Wrath on the mob this plugin picked, rather than letting it
-        // choose its own and pull something on the way.
+        // which is exactly what nothing else here is going to do.
         Configure(InCombatOnly, false);
         Configure(OnlyAttackInCombat, false);
+
+        // The rest keep Wrath on the mob this plugin picked. Manual is the only
+        // mode that never chooses a target of its own, and the hard target
+        // override is not enough on its own: it applies only while there is a
+        // hard target in range, and between one kill and reaching the next one
+        // there is not. Every other mode fills that gap with whatever stands
+        // nearby, and Nearest, the usual choice, prefers exactly the mobs that
+        // are not already fighting you.
+        Configure(DpsRotationMode, Manual);
         Configure(DpsAlwaysHardTarget, true);
         Configure(HealerAlwaysHardTarget, true);
+
+        configured = true;
         return true;
     }
 
@@ -182,6 +206,7 @@ public sealed class WrathIpc : IDisposable
     public void Stop()
     {
         surrendered = false;
+        configured = false;
         lastAttempt = DateTime.MinValue;
 
         if (lease is not { } id)
@@ -214,6 +239,7 @@ public sealed class WrathIpc : IDisposable
     {
         lease = null;
         weTurnedItOn = false;
+        configured = false;
         runningAsOf = DateTime.MinValue;
         jobReadyAsOf = DateTime.MinValue;
 
@@ -247,7 +273,7 @@ public sealed class WrathIpc : IDisposable
         return null;
     }
 
-    private void Configure(int option, bool value) =>
+    private void Configure(int option, object value) =>
         Set(id => setConfig.InvokeFunc(id, option, value), $"set option {option}");
 
     /// <summary>

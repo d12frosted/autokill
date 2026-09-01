@@ -1513,7 +1513,7 @@ public sealed class FarmSession
 
         KeepCompanion();
 
-        if (!wrath.Rotating && !wrath.Start())
+        if (!wrath.Start())
             Status = "no rotation backend, fighting is up to you";
 
         if (targets.Target?.GameObjectId != quarry.GameObjectId)

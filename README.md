@@ -175,8 +175,12 @@ a patch.
 - **Artisan**, only if you want to farm against a crafting list. Its lists are read from
   its config file, so it does not have to be loaded.
 
-If Wrath's auto-rotation is already running, AutoKill leaves it completely alone rather
-than reaching into your settings.
+A run drives Wrath rather than working around it, so it also drives Wrath when your
+auto-rotation was already on. Everything it sets is set under a lease, which is Wrath's
+own way of lending control: the settings are handed back when the run ends. Auto-rotation
+you switched on yourself stays on afterwards. The one thing it borrows that you will
+notice is target selection, pinned to manual for the run so nothing is attacked but the
+mob the run picked.
 
 ## Coverage
 

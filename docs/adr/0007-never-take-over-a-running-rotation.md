@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by [0017](0017-a-run-drives-the-rotation.md).
 
 ## Context
 
