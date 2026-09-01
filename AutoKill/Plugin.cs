@@ -32,6 +32,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly WindowSystem windows = new("AutoKill");
     private readonly MainWindow mainWindow;
     private readonly WrathIpc wrath;
+    private readonly BossModIpc bossmod;
     private readonly Notifier notifier;
     private readonly FarmController farming;
 
@@ -67,11 +68,12 @@ public sealed class Plugin : IDalamudPlugin
             Chime = config.FinishSound,
         };
         wrath = new WrathIpc(PluginInterface, Log);
+        bossmod = new BossModIpc(PluginInterface, Log);
         var lifestream = new LifestreamIpc(PluginInterface, Log);
-        var requirements = new Requirements(PluginInterface, navmesh, wrath, lifestream);
+        var requirements = new Requirements(PluginInterface, navmesh, wrath, bossmod, lifestream);
         var jobs = new Jobs(Objects, DataManager, Condition, config, Log);
         farming = new FarmController(
-            Framework, navmesh, wrath, lifestream, ClientState, Objects, Targets, DataManager, Condition, notifier,
+            Framework, navmesh, wrath, bossmod, lifestream, ClientState, Objects, Targets, DataManager, Condition, notifier,
             requirements,
             jobs, itemId => index?.ItemName(itemId) ?? $"item {itemId}", config, NewRecorder, observations, history, Log);
 
@@ -120,6 +122,7 @@ public sealed class Plugin : IDalamudPlugin
         farming.Dispose();
         observations.Save();
         wrath.Dispose();
+        bossmod.Dispose();
         CommandManager.RemoveHandler(CommandName);
         PluginInterface.UiBuilder.Draw -= windows.Draw;
         PluginInterface.UiBuilder.OpenMainUi -= OpenMainUi;

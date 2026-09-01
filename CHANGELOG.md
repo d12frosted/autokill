@@ -38,6 +38,15 @@ reading the diff. Dates are when the tag went out.
   run picked back up after a death still owes: either way it stands in the
   field with no number behind it, and killing it would never end.
 
+- **It steps out of what is cast at it.** With BossMod or BossMod Reborn
+  installed, either one, a fight now hands the character's feet over so it walks
+  out of the ground about to be dangerous, and takes them back for the travelling.
+  Wrath keeps doing the fighting; BossMod only does the moving. It also keeps a
+  caster at the far edge of its own range instead of standing in melee. Whatever
+  BossMod preset you had active is put back after each fight, and the preset this
+  uses is deleted when the plugin unloads. Neither of them installed and a run
+  fights exactly as it did before, and the needs panel says so.
+
 - **Picking a run back up goes as the same class.** A run that dies is offered
   again with what it still owed, and it used to come back as whatever the job
   policy picked. A hunting log counts the kill for one class and nobody else,
