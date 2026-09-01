@@ -34,9 +34,10 @@ public sealed class Requirements(
     IDalamudPluginInterface plugin,
     NavmeshIpc navmesh,
     WrathIpc wrath,
+    BossModIpc bossmod,
     LifestreamIpc lifestream)
 {
-    public IReadOnlyList<Requirement> All() => [Navmesh(), Wrath(), Lifestream()];
+    public IReadOnlyList<Requirement> All() => [Navmesh(), Wrath(), BossMod(), Lifestream()];
 
     /// <summary>The reason a run cannot start, if there is one.</summary>
     public string? Blocker =>
@@ -84,6 +85,26 @@ public sealed class Requirements(
         return wrath.Rotating
             ? new Requirement(name, RequirementState.Good, "auto-rotation is on, and a run takes it over and hands it back")
             : new Requirement(name, RequirementState.Good, "ready, and it will set this job up if needed");
+    }
+
+    private Requirement BossMod()
+    {
+        const string only = "so a run stands in whatever is cast at it";
+
+        // The two are forks of each other and answer on the same IPC names, so
+        // which one is here decides nothing but what to call it.
+        var installed = Find("BossMod") ?? Find("BossModReborn");
+
+        if (installed is null)
+            return new Requirement("BossMod", RequirementState.Optional, $"not installed, {only}");
+
+        if (!installed.IsLoaded)
+            return new Requirement(installed.Name, RequirementState.Optional, $"installed but not enabled, {only}");
+
+        if (!bossmod.Responding)
+            return new Requirement(installed.Name, RequirementState.Optional, $"not answering, {only}");
+
+        return new Requirement(installed.Name, RequirementState.Good, "ready, and a fight steps out of what it sees coming");
     }
 
     private Requirement Lifestream()

@@ -169,6 +169,10 @@ a patch.
   travels and targets, and leaves the fighting to you.
 - An attuned aetheryte in the zone you want to farm, or in the town its aethernet leads
   out of.
+- **BossMod** or **BossMod Reborn**, if you would rather not stand in things. Either one
+  will do, they are forks of each other. A fight hands the character's feet over so it
+  steps out of what is being cast, and takes them back for the walking. Without it the
+  run fights standing still, which on a long fight is how it dies.
 - **Lifestream**, only for the Dravanian Hinterlands. It is the one zone in the game with
   no aetheryte of its own: you teleport to Idyllshire and take the aethernet out to one
   of its gates, and Lifestream is what rides the aethernet. Nothing else needs it.

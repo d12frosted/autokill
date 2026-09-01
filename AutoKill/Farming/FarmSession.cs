@@ -69,6 +69,11 @@ public sealed class FarmSession
     // the target to shuffle without pulling the character in after it.
     private const float RangedRange = 20f;
 
+    // How far out of reach a dodge may carry the character before the run
+    // stops believing it is a dodge. Wide enough for stepping out of a large
+    // cast, well short of a mob that has walked off.
+    private const float DodgeRoom = 15f;
+
     // How far the character may stand from where the run left it before that
     // reads as the player walking away. Wide enough for mount hover and the
     // slide after a route stops; a moment of deliberate walking crosses it.
@@ -144,6 +149,7 @@ public sealed class FarmSession
     private StopConditions conditions;
     private readonly NavmeshIpc navmesh;
     private readonly WrathIpc wrath;
+    private readonly BossModIpc bossmod;
     private readonly LifestreamIpc lifestream;
     private readonly IClientState clientState;
     private readonly IObjectTable objects;
@@ -205,6 +211,10 @@ public sealed class FarmSession
     private Closeness approach;
     private DateTime? dismountingSince;
     private bool landing;
+
+    // Whether this tick wants BossMod on the feet. Set by the branch that
+    // stands still to fight, read once the tick is over.
+    private bool dodging;
     private Vector3 lastPosition;
     private DateTime? stuckSince;
     private bool stuckReported;
@@ -238,6 +248,7 @@ public sealed class FarmSession
         StopConditions conditions,
         NavmeshIpc navmesh,
         WrathIpc wrath,
+        BossModIpc bossmod,
         LifestreamIpc lifestream,
         IClientState clientState,
         IObjectTable objects,
@@ -258,6 +269,7 @@ public sealed class FarmSession
         this.conditions = conditions;
         this.navmesh = navmesh;
         this.wrath = wrath;
+        this.bossmod = bossmod;
         this.lifestream = lifestream;
         this.clientState = clientState;
         this.objects = objects;
@@ -410,6 +422,11 @@ public sealed class FarmSession
             return;
         }
 
+        // Cleared before the tick and set by the one branch that stands still
+        // to fight. Reconciled after, rather than at each of the dozen ways a
+        // fight ends, because every one of them comes back through here.
+        dodging = false;
+
         switch (Phase)
         {
             case FarmPhase.Teleporting:
@@ -425,6 +442,11 @@ public sealed class FarmSession
                 TickHunt(player);
                 break;
         }
+
+        if (dodging)
+            bossmod.Dodge();
+        else
+            bossmod.Release();
     }
 
     public void Finish(string reason) => Finish(reason, [], Progress);
@@ -440,6 +462,7 @@ public sealed class FarmSession
 
         HoldingRotation = false;
         wrath.Stop();
+        bossmod.Release();
     }
 
     /// <summary>Something is still swinging, and the character is alive to care.</summary>
@@ -491,6 +514,7 @@ public sealed class FarmSession
 
         navmesh.StopCompletely();
         wrath.Stop();
+        bossmod.Release();
 
         chosen = 0;
         approach = Closeness.AtRange;
@@ -563,7 +587,7 @@ public sealed class FarmSession
                 : "you teleported away";
         }
 
-        var steered = navmesh.Moving || navmesh.PathfindInProgress;
+        var steered = navmesh.Moving || navmesh.PathfindInProgress || bossmod.Driving;
         var excused = condition[ConditionFlag.InCombat]
             || condition[ConditionFlag.Casting]
             || condition[ConditionFlag.BetweenAreas]
@@ -729,7 +753,10 @@ public sealed class FarmSession
         // still swinging back.
         navmesh.StopCompletely();
         if (!HoldingRotation)
+        {
             wrath.Stop();
+            bossmod.Release();
+        }
 
         log.Information($"Farming {target.Name} stopped: {reason}");
 
@@ -1412,13 +1439,21 @@ public sealed class FarmSession
         // back is where the walk ends, which is usually still at range.
         var reach = approach == Closeness.AtRange ? EngageRange : MeleeRange;
 
+        // Out of reach because something is being cast where the character was
+        // standing. Walking it straight back in is the exact opposite of the
+        // point, so while the feet are lent out the run stops steering and
+        // lets the dodge finish: the same module walks back into range once
+        // the ground is clear. A quarry that has genuinely wandered off is
+        // further than any dodge, and takes the feet back with it.
+        var lent = bossmod.Driving && distance <= reach + DodgeRoom;
+
         // Not yet within reach. Ride if it is worth riding, walk if it is not.
         //
         // The threshold is what this job can attack from, not what is worth
         // mounting for. Routing to within attack range and then judging arrival
         // by the mounting distance meant a ranged job stopped exactly where it
         // had been told to and then decided it was still too far, forever.
-        if (distance > reach)
+        if (distance > reach && !lent)
         {
             // Not standing over it any more, so wherever the saddle was stuck
             // is behind us.
@@ -1515,6 +1550,10 @@ public sealed class FarmSession
 
         if (!wrath.Start())
             Status = "no rotation backend, fighting is up to you";
+
+        // Standing still to fight is the one stretch of a run with no use for
+        // the route, so it is the only stretch the feet can be lent out for.
+        dodging = true;
 
         if (targets.Target?.GameObjectId != quarry.GameObjectId)
             targets.Target = quarry;
