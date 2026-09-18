@@ -33,6 +33,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly MainWindow mainWindow;
     private readonly WrathIpc wrath;
     private readonly BossModIpc bossmod;
+    private readonly AutoKillIpc ipc;
     private readonly Notifier notifier;
     private readonly FarmController farming;
 
@@ -85,6 +86,7 @@ public sealed class Plugin : IDalamudPlugin
             () => index, farming, PlayerState, Textures, config, observations, history, artisan, hunts,
             () => logbook, fates, past, Save);
         windows.AddWindow(mainWindow);
+        ipc = new AutoKillIpc(PluginInterface, () => index, farming, Log);
         windows.AddWindow(new RunOverlay(
             () => index, farming, PlayerState, config, Textures, past, () => mainWindow.IsOpen = true));
 
@@ -119,6 +121,7 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
+        ipc.Dispose();
         farming.Dispose();
         observations.Save();
         wrath.Dispose();

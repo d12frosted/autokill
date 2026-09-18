@@ -7,6 +7,11 @@ reading the diff. Dates are when the tag went out.
 
 ### Added
 
+- **A door for other plugins.** Five IPC gates, `AutoKill.IsRunning`, `CanFarm`,
+  `FarmItem`, `Status` and `Stop`, so a neighbour can ask for so many of a thing
+  a mob drops and take it back. It runs exactly the leg the By drop tab would,
+  in the field that tab lists first, with the same stops.
+
 - **The hunting log.** A new Log tab, showing what every class and Grand
   Company log still owes: the rank you are on, the ten entries in it, the mobs
   each wants and how many are in. The counts are the game's own, so a rank
