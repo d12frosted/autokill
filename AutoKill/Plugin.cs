@@ -26,7 +26,6 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static ITargetManager Targets { get; private set; } = null!;
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
     [PluginService] internal static IToastGui Toast { get; private set; } = null!;
-    [PluginService] internal static IFateTable FateTable { get; private set; } = null!;
     [PluginService] internal static ITextureProvider Textures { get; private set; } = null!;
 
     private readonly WindowSystem windows = new("AutoKill");
@@ -60,7 +59,6 @@ public sealed class Plugin : IDalamudPlugin
             new ArtisanIpc(PluginInterface, Log));
 
         var hunts = new HuntBills(DataManager, Log);
-        var fates = new Fates(FateTable, ClientState);
 
         var navmesh = new NavmeshIpc(PluginInterface, Log);
         notifier = new Notifier(ChatGui, Toast)
@@ -84,7 +82,7 @@ public sealed class Plugin : IDalamudPlugin
 
         mainWindow = new MainWindow(
             () => index, farming, PlayerState, Textures, config, observations, history, artisan, hunts,
-            () => logbook, fates, past, Save);
+            () => logbook, past, Save);
         windows.AddWindow(mainWindow);
         ipc = new AutoKillIpc(PluginInterface, () => index, farming, Log);
         windows.AddWindow(new RunOverlay(

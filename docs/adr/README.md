@@ -27,3 +27,4 @@ Status values: `Proposed`, `Accepted`, `Superseded by NNNN`, `Rejected`.
 | [0016](0016-one-zone-is-reached-over-the-aethernet.md) | One zone is reached over the aethernet | Accepted |
 | [0017](0017-a-run-drives-the-rotation.md) | A run drives the rotation | Accepted |
 | [0018](0018-the-fight-borrows-the-feet.md) | The fight borrows the feet | Accepted |
+| [0019](0019-a-fate-mob-is-never-fought.md) | A FATE mob is never fought | Accepted |

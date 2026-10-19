@@ -225,6 +225,15 @@ reading the diff. Dates are when the tag went out.
 
 ### Fixed
 
+- **It leaves FATE mobs alone.** A FATE spawns mobs with the same name as the
+  ones around it, so a run farming Wooly Yaks would pick a FATE's Wooly Yak
+  just as readily and then stand beside it while every cast failed with "your
+  level is too high". A mob spawned by a FATE is now never picked, never
+  counted as in sight, and never learnt from, whatever it drops. The Hunts tab
+  no longer offers its FATE targets either, not even while the FATE is up:
+  they read "only inside the FATE, not farmed". Syncing down to fight inside a
+  FATE is slow and dangerous, which is the opposite of what a run is for.
+
 - **It stops picking fights it was not sent for.** A run used to attack whatever
   it walked past on the way to its next target: mobs that were not on its list,
   had no interest in it, and only made the trip longer and more dangerous. That

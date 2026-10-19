@@ -8,8 +8,8 @@ namespace AutoKill.Data;
 /// <summary>One mob a bill wants killed, and how far along it is.</summary>
 /// <param name="FateId">
 /// Some targets only exist while a FATE is running: the named ones on ordinary
-/// bills are often the boss of one. Sending a run to stand where it would be is
-/// how you wait forever, so the bill has to say this out loud.
+/// bills are often the boss of one. A run never fights inside a FATE, so the
+/// bill has to say this out loud rather than offer them.
 /// </param>
 /// <param name="Where">
 /// The bill names a place inside the zone, like "Boulder Downs" rather than
