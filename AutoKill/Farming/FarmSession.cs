@@ -627,7 +627,7 @@ public sealed class FarmSession
 
         var standing = objects
             .OfType<IBattleNpc>()
-            .Where(npc => nameIds.Contains(npc.NameId) && !npc.IsDead && npc.CurrentHp > 0)
+            .Where(npc => Ours(npc) && !npc.IsDead && npc.CurrentHp > 0)
             .Select(npc => new FieldMob(npc.GameObjectId, npc.NameId, npc.Position))
             .ToList();
 
@@ -708,7 +708,7 @@ public sealed class FarmSession
             rotating = wrath.Rotating,
             nearby = objects
                 .OfType<IBattleNpc>()
-                .Where(npc => nameIds.Contains(npc.NameId) && !npc.IsDead && npc.CurrentHp > 0)
+                .Where(npc => Ours(npc) && !npc.IsDead && npc.CurrentHp > 0)
                 .Select(npc => new
                 {
                     id = npc.GameObjectId,
@@ -1790,10 +1790,26 @@ public sealed class FarmSession
             recorder?.Write("companion", new { what = "stance", to = config.CompanionStance.ToString() });
     }
 
+    /// <summary>
+    /// One of ours: the right name, and not spawned by a FATE. A FATE mob is no
+    /// part of the field, so it is not counted, timed or remembered either.
+    /// </summary>
+    private bool Ours(IBattleNpc npc) => nameIds.Contains(npc.NameId) && FateOf(npc) == 0;
+
+    /// <summary>The FATE that spawned it, or zero. Dalamud does not carry this.</summary>
+    private static unsafe ushort FateOf(IBattleNpc npc) =>
+        ((FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)npc.Address)->FateId;
+
+    private static Candidate Judge(IPlayerCharacter player, IBattleNpc npc) => new(
+        Dead: npc.IsDead || npc.CurrentHp == 0,
+        Combatant: npc.BattleNpcKind == BattleNpcSubKind.Combatant,
+        FateId: FateOf(npc),
+        SomeoneElses: npc.TargetObject is not null && npc.TargetObjectId != player.GameObjectId);
+
     /// <summary>How many of the quarry are in sight, for saying so.</summary>
     private int Nearby(IPlayerCharacter player) =>
         objects.OfType<IBattleNpc>()
-            .Count(npc => nameIds.Contains(npc.NameId)
+            .Count(npc => Ours(npc)
                           && !npc.IsDead
                           && npc.CurrentHp > 0
                           && Vector3.Distance(npc.Position, player.Position) <= VisionRadius);
@@ -1852,9 +1868,7 @@ public sealed class FarmSession
             {
                 what = npc.NameId,
                 away = Math.Round(Vector3.Distance(npc.Position, player.Position), 1),
-                why = npc.IsDead || npc.CurrentHp == 0 ? "dead"
-                    : npc.BattleNpcKind != BattleNpcSubKind.Combatant ? "not a combatant"
-                    : npc.TargetObject is not null && npc.TargetObjectId != player.GameObjectId ? "someone else's"
+                why = Judge(player, npc) is { Fit: false } unfit ? Candidate.Say(unfit.Why)
                     : quarryWatch.GivenUpOn(npc.GameObjectId, npc.Position, DateTime.UtcNow) ? "given up on"
                     : "out of range",
             })
@@ -1877,14 +1891,9 @@ public sealed class FarmSession
         {
             if (obj is not IBattleNpc npc)
                 continue;
-            if (npc.BattleNpcKind != BattleNpcSubKind.Combatant)
-                continue;
             if (!nameIds.Contains(npc.NameId))
                 continue;
-            if (npc.IsDead || npc.CurrentHp == 0)
-                continue;
-            // Someone else's fight is not ours to steal.
-            if (npc.TargetObject is not null && npc.TargetObjectId != player.GameObjectId)
+            if (!Judge(player, npc).Fit)
                 continue;
             // One the run already got nowhere with. Skipped here rather than
             // anywhere else because this is what the circuit reads as an empty

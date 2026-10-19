@@ -36,7 +36,6 @@ public sealed class MainWindow : Window
     private readonly ArtisanLists artisan;
     private readonly HuntBills hunts;
     private readonly Func<HuntingLog?> logbook;
-    private readonly Fates fates;
     private readonly PastRuns past;
     private readonly Action saveConfig;
 
@@ -85,7 +84,6 @@ public sealed class MainWindow : Window
         ArtisanLists artisan,
         HuntBills hunts,
         Func<HuntingLog?> logbook,
-        Fates fates,
         PastRuns past,
         Action saveConfig)
         : base("AutoKill###AutoKillMain")
@@ -100,7 +98,6 @@ public sealed class MainWindow : Window
         this.artisan = artisan;
         this.hunts = hunts;
         this.logbook = logbook;
-        this.fates = fates;
         this.past = past;
         this.saveConfig = saveConfig;
         SizeConstraints = new WindowSizeConstraints
@@ -326,9 +323,13 @@ public sealed class MainWindow : Window
         using var indent = ImRaii.PushIndent();
         Style.Muffled(where);
 
+        // Only ever standing inside a FATE, and a FATE mob is never fought: above
+        // its level nothing lands without syncing down, which is slow and
+        // dangerous. Better said plainly than offered and then stood beside.
         if (target.Fated)
         {
-            DrawFatedTarget(mobs, target);
+            var named = string.IsNullOrEmpty(target.FateName) ? "a FATE" : $"the FATE \"{target.FateName}\"";
+            Style.Muffled($"only inside {named}, not farmed");
             return;
         }
 
@@ -361,40 +362,6 @@ public sealed class MainWindow : Window
 
         if (areas.Count > 2)
             Style.Muffled($"and {areas.Count - 2} more in that zone");
-    }
-
-    /// <summary>
-    /// A target that only exists while a FATE is running.
-    /// </summary>
-    /// <remarks>
-    /// Standing where it would be is how a run waits forever, so this only
-    /// offers to go when the FATE is actually up, and then goes to where the
-    /// FATE is rather than where the mob was once recorded. That is the better
-    /// position anyway: it is live rather than remembered.
-    ///
-    /// Being out of the zone is not the same as the FATE being down, and saying
-    /// so would be a guess dressed as a fact.
-    /// </remarks>
-    private void DrawFatedTarget(MobIndex mobs, HuntTarget target)
-    {
-        var named = string.IsNullOrEmpty(target.FateName) ? "a FATE" : $"the FATE \"{target.FateName}\"";
-
-        if (fates.Running(target.FateId) is { } running)
-        {
-            if (Style.Pick(
-                    $"{named} is up now",
-                    "Goes to where the FATE actually is, rather than where the mob was recorded."))
-            {
-                PlanHunt(mobs, target, mobs.AreaAt(target.TerritoryTypeId, running.Position));
-            }
-
-            Style.Trailing($"{running.Progress}% done");
-            return;
-        }
-
-        Style.Muffled(fates.InZone(target.TerritoryTypeId)
-            ? $"{named} is not running"
-            : $"only while {named} is running");
     }
 
     private void PlanHunt(MobIndex mobs, HuntTarget target, FarmArea area)

@@ -53,8 +53,9 @@ whole list: one run per material, zone by zone, each going for what is still mis
 left on each. Pick a target and it goes to that mob, in the zone the bill names, with the
 kill count set to what is still owed. That includes the weekly elite bill: every one of
 those names a B rank, and if the mark is not up the run patrols its spawn points until it
-is. Targets that only appear inside a FATE say so, and can only be picked while that FATE
-is running, in which case it goes to where the FATE actually is.
+is. Targets that only appear inside a FATE say so and are not farmed: a FATE wants the
+character synced down, which is slow and dangerous. For the same reason a run never
+fights a FATE mob, even one that shares its name with what it was sent for.
 
 **Or work through the hunting log.** The Log tab shows each class's log and your Grand
 Company's: the rank you are on, its ten entries, the mobs each wants and how many are in.

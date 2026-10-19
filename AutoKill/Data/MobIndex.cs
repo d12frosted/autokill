@@ -7,9 +7,6 @@ using LuminaSupplemental.Excel.Services;
 
 namespace AutoKill.Data;
 
-/// <summary>What turns world coordinates into the ones the map shows.</summary>
-internal readonly record struct MapProjection(ushort SizeFactor, short OffsetX, short OffsetY);
-
 public sealed record MobEntry(
     uint BNpcNameId,
     string Name,
@@ -60,7 +57,6 @@ public sealed class MobIndex
     private readonly Dictionary<uint, string> droppableItemNames;
     private readonly Dictionary<uint, ushort> droppableItemIcons;
     private readonly Dictionary<uint, string> zoneNames;
-    private readonly Dictionary<uint, MapProjection> projections;
 
     // Fields worked out on demand and kept, keyed by the mobs they were worked
     // out for. Drawn from the window thread only.
@@ -71,15 +67,13 @@ public sealed class MobIndex
         Dictionary<uint, List<uint>> mobsByItem,
         Dictionary<uint, string> droppableItemNames,
         Dictionary<uint, ushort> droppableItemIcons,
-        Dictionary<uint, string> zoneNames,
-        Dictionary<uint, MapProjection> projections)
+        Dictionary<uint, string> zoneNames)
     {
         this.byNameId = byNameId;
         this.mobsByItem = mobsByItem;
         this.droppableItemNames = droppableItemNames;
         this.droppableItemIcons = droppableItemIcons;
         this.zoneNames = zoneNames;
-        this.projections = projections;
     }
 
     public IReadOnlyCollection<MobEntry> Mobs => byNameId.Values;
@@ -213,14 +207,6 @@ public sealed class MobIndex
         var locationsByMob = new Dictionary<uint, List<FarmLocation>>();
         var zoneNames = new Dictionary<uint, string>();
 
-        // Kept so that somewhere learnt at runtime, like a FATE that is up right
-        // now, can be shown in the coordinates the map uses.
-        var projections = new Dictionary<uint, MapProjection>();
-        foreach (var territory in territories)
-        {
-            if (territory.Map.ValueNullable is { } m && territory.RowId != 0)
-                projections[territory.RowId] = new MapProjection(m.SizeFactor, m.OffsetX, m.OffsetY);
-        }
         foreach (var ((nameId, territoryId), seen) in grouped)
         {
             if (!territories.TryGetRow(territoryId, out var territory))
@@ -285,35 +271,10 @@ public sealed class MobIndex
             + $"{droppableItemNames.Count} droppable items.");
 
         return new MobIndex(
-            byNameId, mobsByItem, droppableItemNames, droppableItemIcons, zoneNames, projections);
+            byNameId, mobsByItem, droppableItemNames, droppableItemIcons, zoneNames);
     }
 
     public MobEntry? Get(uint bNpcNameId) => byNameId.GetValueOrDefault(bNpcNameId);
-
-    /// <summary>Somewhere to farm that is not in the shipped data at all.</summary>
-    /// <remarks>
-    /// A FATE that is running is a better answer than anything recorded: it is
-    /// where the mob is right now rather than where it was once seen. One spot,
-    /// since a FATE is one place.
-    /// </remarks>
-    public FarmArea AreaAt(uint territoryId, Vector3 position)
-    {
-        var zone = ZoneName(territoryId);
-        var onMap = ToMap(territoryId, position);
-        return new FarmArea(
-            territoryId,
-            zone,
-            position,
-            onMap,
-            [new FarmLocation(territoryId, zone, position, onMap, 1, 0)]);
-    }
-
-    public Vector2 ToMap(uint territoryId, Vector3 world) =>
-        projections.TryGetValue(territoryId, out var map)
-            ? new Vector2(
-                (float)MapCoordinates.ToMap(world.X, map.SizeFactor, map.OffsetX),
-                (float)MapCoordinates.ToMap(world.Z, map.SizeFactor, map.OffsetY))
-            : Vector2.Zero;
 
     /// <summary>The name of a droppable item, for picking one out of a list.</summary>
     public string ItemName(uint itemId) =>

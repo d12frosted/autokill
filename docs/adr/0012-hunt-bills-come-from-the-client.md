@@ -4,6 +4,9 @@
 
 Accepted
 
+Its FATE targets are superseded by [0019](0019-a-fate-mob-is-never-fought.md): they are
+no longer offered at all.
+
 ## Context
 
 A hunt bill is already a farming order written by the game: kill three of this mob, in
